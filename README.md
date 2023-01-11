@@ -1,5 +1,4 @@
-# kindred
-(Infer realized kinship via latent identity-by-descent states)
+# Kindred (Infer realized kinship via latent identity-by-descent states)
 
 Kindred is designed to infer kinship $\phi$ between a pair of samples. If the pair is one and itself, the kinship is $\phi = (1+F)/2$ where $F$ denotes inbreeding coefficient. 
 
@@ -52,12 +51,12 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 4) You may store precomputed allele frequencies in a vcf file "annotate.vcf.gz". Kindred can use the allele frequencies by  
 
        $ bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz  | \
-          kindred -v - -o test 
+          kindred - -o test 
 
 5) You may store multiple allele frequencies in an annoation file, and you want use EUR_AF instead of EAS_AF or AFR_AF: 
   
        $ bcftools annotate --remove INFO -c 'INFO/EUR_AF' -a annotate.vcf.gz in.vcf.gz  | \
-          kindred -v - -o test -a EUR_AF
+          kindred - -o test -a EUR_AF
 
 6) If you want to only use markers on chromosome 8 to compute kinship using sample estimated allele frquencies:  
 
