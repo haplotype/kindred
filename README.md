@@ -1,22 +1,23 @@
-# Kindred (Infer realized kinship via latent identity-by-descent states)
+# Kindred 
 
-Kindred is designed to infer kinship $\phi$ between a pair of samples. If the pair is one and itself, the kinship is $\phi = (1+F)/2$ where $F$ denotes inbreeding coefficient. 
+Kindred is designed to infer kinship $\phi$ between a pair of samples accounting for inbreeding of the samples. This is done through modelling nine latent Jacquard IBD states. If the pair is one and itself, the kinship is $\phi = (1+F)/2$ where $F$ denotes inbreeding coefficient. 
 
 ## Input and options
 Kindred takes vcf file or stream as input. It is designed to work with bcftools.  The vcf file must contain "INFO/AF" field and biallelic genotypes. If the AF field is not readily available, it can be populated by bcftools on the fly. 
 User can also specify other name of the field, such as EUR_AF or EAS_AF in the 1000 genomes vcf files, via -a option. 
-Kindred uses multi-threading to do calculation and user can specify the number of threads with -t option. 
+Kindred uses multi-threading to speed up calculation and user can specify the number of threads with -t option. 
 
 ## Output
 Kindred output two files. One is "pref.grm" the other is "pref.kin", where pref can be specified with -o option. 
-In pref.grm, the first line contains individual ID. The rest is an $n\times n$ square matrix with 6 digits accuracy. The $i$-th row and $j$-th column is $\phi_{ij}$. 
+In pref.grm, the first line contains individual ID. The rest is an $n\times n$ square matrix with 6 digits accuracy. The $i$-th row and $j$-th column is $2\phi_{ij}$. 
 
     p1_g1-b1-s1 p1_g1-b1-i1 p1_g2-b1-i1 p1_g2-b2-i1 p2_g1-b1-s1 p2_g1-b1-i1 
-    0.501266 0.000000 0.250565 0.245546 0.002957 0.000405 0.000000 0.000000 ...
-    0.000000 0.499778 0.244624 0.248404 0.000532 0.000000 0.001975 0.000000 
-    0.250565 0.244624 0.499811 0.262668 0.000000 0.000000 0.000000 0.000000 
-    0.245546 0.248404 0.262668 0.501320 0.000000 0.000000 0.000000 0.000000 
-    0.002957 0.000532 0.000000 0.000000 0.499496 0.000000 0.243027 0.243600 ...
+    1.016231 0.000000 0.506842 0.435748 0.000000 0.000000 ...
+    0.000000 0.988070 0.409146 0.461766 0.000000 0.000000
+    0.506842 0.409146 1.015925 0.260444 0.000000 0.000000
+    0.435748 0.461766 0.260444 0.989434 0.000000 0.000000
+    0.000000 0.000000 0.000000 0.000000 1.002591 0.000000
+    0.000000 0.000000 0.000000 0.000000 0.000000 1.011074 ...
     ...
 
 In pref.kin, the first line is the header with space delimit, with $(n+1)n/2$ additional lines. 
