@@ -50,14 +50,14 @@ using namespace std;
 #define VERSION "0.3"
 
 typedef struct KData {
-    double * grm = NULL; 
-    double ** kin = NULL; 
-    uint8_t * gt = NULL; 
-    double * raf = NULL; 
-    int nb = 100; 
+    double * grm; 
+    double ** kin; 
+    uint8_t * gt; 
+    double * raf; 
+    int nb; 
     int ni; 
     int ns; 
-    int nth = 4; 
+    int nth; 
 } KData; 
 
 KData gdadu; 
@@ -177,13 +177,14 @@ int main(int argc, char *argv[])
 	string af_tag("AF"); 
 	char c;
         gdadu.nb = 100; //number of frequency bins; 
-	gdadu.nth = 4; 
+	gdadu.nth = 8; 
 
 	while ((c = getopt(argc, argv, "a:b:i:o:t:")) >= 0) 
 	{
 	    switch (c) {
 		case 'a': 
 		    af_tag.assign(optarg); 
+		    break; 
 		case 'b': 
 		    gdadu.nb = atoi(optarg); 
 		    break;
@@ -215,10 +216,10 @@ int main(int argc, char *argv[])
 	bcf1_t* line = bcf_init();   
 	gdadu.ni = bcf_hdr_nsamples(hdr); 
 	cout << "total number of samples = " << gdadu.ni << endl; 
-	if(hdr->samples != NULL) {
-	    for (int i = 0; i < gdadu.ni; i++)
-		cout << hdr->samples[i] << endl; 
-	}
+//	if(hdr->samples != NULL) {
+//	    for (int i = 0; i < gdadu.ni; i++)
+//		cout << hdr->samples[i] << endl; 
+//	}
 	gdadu.ns = 0; 
 	int ns0 = 0; 
 	while(bcf_read1(fpv, hdr, line) == 0) {   
@@ -258,7 +259,7 @@ int main(int argc, char *argv[])
 	       fprintf(stdout, "processed %d biallelic SNPs in vcf file \n", gdadu.ns); 
        }
        cout << "total number of SNPs = " << gdadu.ns << endl; 
-       cout << "total number of SNPs has no AF = " << ns0 << endl; 
+       cout << "total number of SNPs without tag " << af_tag << " = " << ns0 << endl; 
 
 
    gdadu.raf = new double[gdadu.ns]; //rounded allele frequency. 
@@ -280,8 +281,10 @@ int main(int argc, char *argv[])
    for (int i=0, k=0; i<gdadu.ni; i++) 
        for (int j=i; j<gdadu.ni; j++, k++) 
        {
-	   tr2sq.insert({(long)k, (long)(i*gdadu.ni+j)}); 
-	   sq2tr.insert({(long)(i*gdadu.ni+j), (long)k}); 
+		   long tr = (long) k; 
+		   long sq = (long) (i*gdadu.ni+j); 
+		   tr2sq[tr] = sq; 
+		   sq2tr[sq] = tr;
        }
    //global map for exchange indices; 
 
@@ -343,7 +346,7 @@ int main(int argc, char *argv[])
 		   else 
 			fprintf(fp1, "id%d id%d ", i1, i2); 
 		   for (int c = 0; c < 11; c++)
-		       fprintf(fp1, "%8.6f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
+		       fprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
 		   fprintf(fp1, "\n"); 
 	       }
 	       load = 0; 
@@ -366,7 +369,7 @@ int main(int argc, char *argv[])
 	   else 
 		fprintf(fp1, "id%d id%d ", i1, i2); 
 	   for (int c = 0; c < 11; c++)
-	       fprintf(fp1, "%8.6f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
+	       fprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
 	   fprintf(fp1, "\n"); 
        }
     }
@@ -522,7 +525,7 @@ void jacquard(void *par)
        exit(0); 
    }  
    double phi=x[0]+ (x[2]+x[4]+x[6])/2+x[7]/4; 
-   gdadu.grm[tiktok] = phi; 
+   gdadu.grm[tiktok] = 2*phi; 
    double sumx = 0; 
    for (int i = 0; i < 9; i++)
        sumx += x[i]; 
