@@ -29,29 +29,29 @@ In addition to header, the file contains $n(n+1)/2$ lines, containing all pairs.
 3) If in.vcf.gz contain AF field, but you want to recomputed it. 
 
 <code> $> bcftools annotate --remove INFO in.vcf.gz | \
- bcftools plugin fill-tags in.vcf.gz | \
- kindred - -o test </code> 
+          bcftools plugin fill-tags in.vcf.gz | \
+          kindred - -o test </code> 
 
 4) You may store precomputed allele frequencies in a vcf file "annotate.vcf.gz". Kindred can use the allele frequencies by  
 
 <code> $> bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz  | \
- kindred -v - -o test </code> 
+          kindred -v - -o test </code> 
 
 5) You may store multiple allele frequencies in an annoation file, and you want use EUR_AF instead of EAS_AF or AFR_AF: 
   
 <code> $> bcftools annotate --remove INFO -c 'INFO/EUR_AF' -a annotate.vcf.gz in.vcf.gz  | \
- kindred -v - -o test -a EUR_AF </code>
+          kindred -v - -o test -a EUR_AF </code>
 
 6) If you want to only use markers on chromosome 8 to compute kinship using sample estimated allele frquencies:  
 
 <code> $> bcftools filter -r 8 in.vcf.gz | bcftools plugin fill-tags  | \
-  kindred - -o test.chr8 </code>
+          kindred - -o test.chr8 </code>
 
 7) If you want to do it with allele frequencies stored in an annotation file:   
 
 <code> $> bcftools fitler -r 8 in.vcf.gz | \
-   bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz  | \
-   kindred - -o test.chr8 </code> 
+          bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz  | \
+          kindred - -o test.chr8 </code> 
 
 
 ## Protocol to prepare annotation vcf files
@@ -61,10 +61,9 @@ We first obtain all allelic SNPs with minimum of 50 counts of minor alleles (amo
 for each SNP count AN-AC for different populations (the example below is for chr22 of CHB). 
 
 <code>  bcftools view -m2 -M2 -v snps -c 50:minor ALL.chr22.phase3.genotypes.vcf.gz | \
- bcftools view -S samples.CHB.txt | bcftools annotate --remove INFO |\
- bcftools plugin fill-AN-AC | \
- bcftools query -f "%CHROM %POS %REF %ALT %INFO/AC %INFO/AN\n" > chb.chr22.an-ac 
-</code> 
+        bcftools view -S samples.CHB.txt | bcftools annotate --remove INFO |\
+        bcftools plugin fill-AN-AC | \
+        bcftools query -f "%CHROM %POS %REF %ALT %INFO/AC %INFO/AN\n" > chb.chr22.an-ac </code> 
 
  
 Suppose we obtain for each chrosome the an-ac file for populations CEU and YRI, in addition to CHB.  
@@ -74,16 +73,16 @@ We can then use FST to filter SNPs that to be annotated.
 To prepare a vcf file with CEU allele frequencies.  
 
 <code> bcftools view -S ceu.samples.list annotate --remove INFO plugin fill-tags | \
- bcftools view -G > annotation.ceu 
-</code> 
+ bcftools view -G > annotation.ceu </code> 
 
 ## Other useful tips. 
 1) plink can convert plink format to vcf format
-<code> $> plink --bfile prefix --recode vcf --out in 
+
+<code> $> plink --bfile prefix --recode vcf --out in </code>
 
 2) Bcftools requires vcf files to be zipped and indexed
+
 <code> $> bgzip in.vcf 
-$> tabix in.vcf.gz
-</code> 
+       $> tabix in.vcf.gz </code> 
 You will have in.vcf.gz (instead of in.vcf) and in.vcf.gz.tbi. 
 
