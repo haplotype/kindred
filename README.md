@@ -45,8 +45,7 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 
 3) If in.vcf.gz contain AF tag, but you want to recomputed it anyway:  
 
-       $ bcftools annotate --remove INFO in.vcf.gz | \
-          bcftools plugin fill-tags in.vcf.gz | \
+       $ bcftools annotate --remove INFO in.vcf.gz | bcftools plugin fill-tags | \
           kindred -i - -o pref 
 
 4) You may store precomputed allele frequencies in a vcf file "annotate.vcf.gz". Kindred can use the allele frequencies by  
