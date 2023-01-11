@@ -41,23 +41,23 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 
 2) If in.vcf.gz has no AF tag, and one wants to use allele frequencies estimated from genotypes in the vcf file: 
 
-       $ bcftools plugin fill-tags in.vcf.gz | kindred -i - -o test 
+       $ bcftools plugin fill-tags in.vcf.gz | kindred -i - -o pref 
 
 3) If in.vcf.gz contain AF tag, but you want to recomputed it anyway:  
 
        $ bcftools annotate --remove INFO in.vcf.gz | \
           bcftools plugin fill-tags in.vcf.gz | \
-          kindred -i - -o test 
+          kindred -i - -o pref 
 
 4) You may store precomputed allele frequencies in a vcf file "annotate.vcf.gz". Kindred can use the allele frequencies by  
 
        $ bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz  | \
-          kindred -i - -o test 
+          kindred -i - -o pref 
 
 5) You may store multiple allele frequencies in an annoation file, and you want use EUR_AF instead of EAS_AF or AFR_AF: 
   
        $ bcftools annotate --remove INFO -c 'INFO/EUR_AF' -a annotate.vcf.gz in.vcf.gz  | \
-          kindred -i - -o test -a EUR_AF
+          kindred -i - -o pref -a EUR_AF
 
 6) You may use markers on chromosome 8 (or a region) to compute kinship with sample estimated allele frquencies:  
 
