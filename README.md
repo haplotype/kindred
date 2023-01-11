@@ -19,42 +19,39 @@ In addition to header, the file contains $n(n+1)/2$ lines, containing all pairs.
 ## Usage examples
 
 1) If in.vcf.gz contains AF field, one can simply do: 
-<code> $> kindred in.vcf.gz -o pref
-</code>
+
+<code> $> kindred in.vcf.gz -o pref </code>
 
 2) If in.vcf.gz has no AF field, and one wants to use allele frequencies estimated from genotypes in the vcf file. 
-<code> $> bcftools plugin fill-tags in.vcf.gz | kindred - -o test
-</code>
+
+<code> $> bcftools plugin fill-tags in.vcf.gz | kindred - -o test </code>
 
 3) If in.vcf.gz contain AF field, but you want to recomputed it. 
+
 <code> $> bcftools annotate --remove INFO in.vcf.gz | \
  bcftools plugin fill-tags in.vcf.gz | \
- kindred - -o test
-</code> 
+ kindred - -o test </code> 
 
-4) Suppose you have a precomputed allele frequencies in a vcf file named "annotate.vcf.gz". You can use it to annotate in.vcf.gz so that kindred can use the allele frequencies for computation. 
+4) You may store precomputed allele frequencies in a vcf file "annotate.vcf.gz". Kindred can use the allele frequencies by  
+
 <code> $> bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz  | \
- kindred -v - -o test
-</code> 
+ kindred -v - -o test </code> 
 
-5) Suppose in annotate.vcf.gz you have multiple tags under INFO such as EUR_AF and EAS_AF and you want use EUR_AF in kindred calcultion. 
+5) You may store multiple allele frequencies in an annoation file, and you want use EUR_AF instead of EAS_AF or AFR_AF: 
+  
 <code> $> bcftools annotate --remove INFO -c 'INFO/EUR_AF' -a annotate.vcf.gz in.vcf.gz  | \
- kindred -v - -o test -a EUR_AF
-</code>
+ kindred -v - -o test -a EUR_AF </code>
 
-This command first clears INFO fields from in.vcf.gz, then creates EUR\_AF field using information in annotate.vcf.gz.  Kindred takes the output stream to do calculations on the fly.  Those SNPs who are not annotated with an AF field will not go into the kindred calculation. 
+6) If you want to only use markers on chromosome 8 to compute kinship using sample estimated allele frquencies:  
 
-
-6) Suppose you want to only use markers on chromosome 8 to do calculation,  you can do 
 <code> $> bcftools filter -r 8 in.vcf.gz | bcftools plugin fill-tags  | \
-  kindred - -o test.chr8
-</code>
+  kindred - -o test.chr8 </code>
 
-7) With annotation file you can compute kinship using markers on chromosome 8.  
+7) If you want to do it with allele frequencies stored in an annotation file:   
+
 <code> $> bcftools fitler -r 8 in.vcf.gz | \
    bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz  | \
-   kindred - -o test.chr8
-</code> 
+   kindred - -o test.chr8 </code> 
 
 
 ## Protocol to prepare annotation vcf files
@@ -62,6 +59,7 @@ To prepare annotation files that contains allele frequencies for a specific popu
 we downloaded 1000 genomes vcf and tbi files, they were arranged in different chromosomes. 
 We first obtain all allelic SNPs with minimum of 50 counts of minor alleles (among 2504 samples).  
 for each SNP count AN-AC for different populations (the example below is for chr22 of CHB). 
+
 <code>  bcftools view -m2 -M2 -v snps -c 50:minor ALL.chr22.phase3.genotypes.vcf.gz | \
  bcftools view -S samples.CHB.txt | bcftools annotate --remove INFO |\
  bcftools plugin fill-AN-AC | \
@@ -74,6 +72,7 @@ For each SNP we  do a chisq test to compute p-values (pv), and write a vcf file 
 We can then use FST to filter SNPs that to be annotated. 
 
 To prepare a vcf file with CEU allele frequencies.  
+
 <code> bcftools view -S ceu.samples.list annotate --remove INFO plugin fill-tags | \
  bcftools view -G > annotation.ceu 
 </code> 
