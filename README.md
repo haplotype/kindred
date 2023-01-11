@@ -105,3 +105,8 @@ To prepare a vcf file with CEU allele frequencies.
        $ tabix in.vcf.gz 
 
 You will have in.vcf.gz (instead of in.vcf) and in.vcf.gz.tbi. 
+
+3) print all INFO tags in in.vcf.gz 
+       
+       $ bcftools query -f '%INFO\n' in.vcf.gz | head -n 2 
+       
