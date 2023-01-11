@@ -8,7 +8,7 @@ User can also specify other tag name, such as EUR_AF or EAS_AF in the 1000 genom
 Kindred uses multi-threading to speed up calculation and user can specify the number of threads with -t option. 
 
 ## Output
-Kindred by default output two files: pref.log and pref.grm, where pref can be specified with -o option. 
+Kindred by default outputs two files: pref.log and pref.grm, where pref can be specified with -o option. 
 In pref.grm, the first line contains individual ID. The rest is an $n\times n$ square matrix with 6 digits accuracy. The $i$-th row and $j$-th column is $2\phi_{ij}$. 
 
     pg1 pg2 pg3 pg4 pg5 pg6 ...  
@@ -35,15 +35,15 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 
 ## Usage examples
 
-1) If in.vcf.gz contains AF field, one can simply do: 
+1) If in.vcf.gz contains AF tag, one can simply do: 
     
        $ kindred -i in.vcf.gz -o pref 
 
-2) If in.vcf.gz has no AF field, and one wants to use allele frequencies estimated from genotypes in the vcf file. 
+2) If in.vcf.gz has no AF tag, and one wants to use allele frequencies estimated from genotypes in the vcf file: 
 
        $ bcftools plugin fill-tags in.vcf.gz | kindred -i - -o test 
 
-3) If in.vcf.gz contain AF field, but you want to recomputed it. 
+3) If in.vcf.gz contain AF tag, but you want to recomputed it anyway:  
 
        $ bcftools annotate --remove INFO in.vcf.gz | \
           bcftools plugin fill-tags in.vcf.gz | \
@@ -59,12 +59,12 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
        $ bcftools annotate --remove INFO -c 'INFO/EUR_AF' -a annotate.vcf.gz in.vcf.gz  | \
           kindred -i - -o test -a EUR_AF
 
-6) If you want to only use markers on chromosome 8 to compute kinship using sample estimated allele frquencies:  
+6) You may use markers on chromosome 8 (or a region) to compute kinship with sample estimated allele frquencies:  
 
        $ bcftools filter -r 8 in.vcf.gz | bcftools plugin fill-tags  | \
           kindred -i - -o test.chr8
 
-7) If you want to do it with allele frequencies stored in an annotation file:   
+7) You may do it with allele frequencies stored in an annotation file:   
 
        $ bcftools fitler -r 8 in.vcf.gz | \
           bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz  | \
@@ -72,6 +72,8 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 
 
 ## Protocol to prepare annotation vcf files
+By selecting a subset of SNPs that have similar allele frequenices across population, kindred can infer kinship for admixed samples. Below is a protocol that generates a FST tag that can be used to select such SNPs. 
+
 To prepare annotation files that contains allele frequencies for a specific population,  
 we downloaded 1000 genomes vcf and tbi files, they were arranged in different chromosomes. 
 We first obtain all allelic SNPs with minimum of 50 counts of minor alleles (among 2504 samples).  
