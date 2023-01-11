@@ -68,6 +68,8 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
        $ bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz filter -r 8 | \
           kindred -i - -o test.chr8 
 
+8) Filter out other variants only retain biallelic SNPs for computation: 
+       $ bcftools view -m2 -M2 -v snps in.vcf.gz | kindred -i - -o pref 
 
 ## Protocol to prepare annotation vcf files
 By selecting a subset of SNPs that have similar allele frequenices across population, kindred can infer kinship for admixed samples. Below is a protocol that generates a FST tag that can be used to select such SNPs. 
