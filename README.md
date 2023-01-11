@@ -11,7 +11,7 @@ Kindred uses multi-threading to speed up calculation and user can specify the nu
 Kindred output two files. One is "pref.grm" the other is "pref.kin", where pref can be specified with -o option. 
 In pref.grm, the first line contains individual ID. The rest is an $n\times n$ square matrix with 6 digits accuracy. The $i$-th row and $j$-th column is $2\phi_{ij}$. 
 
-    pgbs1 pgbs2 pgbs3 pgbs4 pgbs5 pgbs6 ...  
+    pg1 pg2 pg3 pg4 pg5 pg6 ...  
     1.000276 0.000000 0.480721 0.473312 0.000000 0.000000 ...
     0.000000 0.998443 0.468201 0.478238 0.000000 0.000000 ...
     0.480721 0.468201 0.999667 0.502964 0.000000 0.000000 ...
@@ -23,11 +23,11 @@ In pref.grm, the first line contains individual ID. The rest is an $n\times n$ s
 In pref.kin, the first line is the header with space delimit, with $(n+1)n/2$ additional lines. 
 
     ID1 ID2 phi sumd d1 d2 d3 d4 d5 d6 d7 d8 d9
-    pgbs1 pgbs1 0.50014 1.00051 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 1.00028 0.00000 0.00023 
-    pgbs1 pgbs2 0.00000 0.99758 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.99758 
-    pgbs1 pgbs3 0.24036 1.00040 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.02403 0.91337 0.06299
-    pgbs1 pgbs4 0.23666 1.00009 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.94662 0.05347
-    pgbs1 pgbs5 0.00000 0.99922 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.99922
+    pg1 pg1 0.50014 1.00051 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 1.00028 0.00000 0.00023 
+    pg1 pg2 0.00000 0.99758 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.99758 
+    pg1 pg3 0.24036 1.00040 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.02403 0.91337 0.06299
+    pg1 pg4 0.23666 1.00009 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.94662 0.05347
+    pg1 pg5 0.00000 0.99922 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.99922
     ...
 
 ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilities of Jacquard latent states, and sumd is the sum of the nine probabilities, should be close to $1$.  
