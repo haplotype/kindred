@@ -65,8 +65,7 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 
 7) You may do it with allele frequencies stored in an annotation file:   
 
-       $ bcftools fitler -r 8 in.vcf.gz | \
-          bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz  | \
+       $ bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz filter -r 8 | \
           kindred -i - -o test.chr8 
 
 
