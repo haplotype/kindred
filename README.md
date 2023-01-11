@@ -12,16 +12,13 @@ Kindred uses multi-threading to do calculation and user can specify the number o
 Kindred output two files. One is "pref.grm" the other is "pref.kin", where pref can be specified with -o option. 
 In pref.grm, the first line contains individual ID. The rest is an $n\times n$ square matrix with 6 digits accuracy. The $i$-th row and $j$-th column is $\phi_{ij}$. 
 
-    parent1_g1-b1-s1 parent1_g1-b1-i1 parent1_g2-b1-i1 parent1_g2-b2-i1 parent2_g1-b1-s1 parent2_g1-b1-i1 parent2_g2-b1-i1 parent2_g2-b2-i1 
+    parent1_g1-b1-s1 parent1_g1-b1-i1 parent1_g2-b1-i1 parent1_g2-b2-i1 parent2_g1-b1-s1 parent2_g1-b1-i1 
     0.501266 0.000000 0.250565 0.245546 0.002957 0.000405 0.000000 0.000000 ...
     0.000000 0.499778 0.244624 0.248404 0.000532 0.000000 0.001975 0.000000 
     0.250565 0.244624 0.499811 0.262668 0.000000 0.000000 0.000000 0.000000 
     0.245546 0.248404 0.262668 0.501320 0.000000 0.000000 0.000000 0.000000 
-    0.002957 0.000532 0.000000 0.000000 0.499496 0.000000 0.243027 0.243600 
-    0.000405 0.000000 0.000000 0.000000 0.000000 0.500006 0.247754 0.247671 
-    0.000000 0.001975 0.000000 0.000000 0.243027 0.247754 0.499435 0.268556 
-    0.000000 0.000000 0.000000 0.000000 0.243600 0.247671 0.268556 0.499396 ...
-    ......
+    0.002957 0.000532 0.000000 0.000000 0.499496 0.000000 0.243027 0.243600 ...
+    ...
 
 In pref.kin, the first line is the header with space delimit, with $(n+1)n/2$ additional lines. 
 
@@ -31,9 +28,7 @@ In pref.kin, the first line is the header with space delimit, with $(n+1)n/2$ ad
     parent1_g1-b1-s1 parent1_g2-b1-i1 0.250565 1.000210 0.000000 0.000000 0.000000 0.003299 0.000000 0.000000 0.012577 0.977105 0.007229
     parent1_g1-b1-s1 parent1_g2-b2-i1 0.245546 1.000082 0.000000 0.000000 0.004423 0.000000 0.003689 0.000000 0.000000 0.965958 0.026011
     parent1_g1-b1-s1 parent2_g1-b1-s1 0.002957 1.000164 0.000000 0.000000 0.000000 0.000597 0.000000 0.000000 0.005913 0.000000 0.993653
-    parent1_g1-b1-s1 parent2_g1-b1-i1 0.000405 1.000016 0.000000 0.000000 0.000000 0.000767 0.000000 0.000000 0.000809 0.000000 0.998440
-    parent1_g1-b1-s1 parent2_g2-b1-i1 0.000000 0.999652 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.999652
-    ...... 
+    ...
 
 ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilities of Jacquard latent states, and sumd is the sum of the nine probabilities, should be close to $1$.  
   
