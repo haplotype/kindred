@@ -82,7 +82,8 @@ To prepare a vcf file with CEU allele frequencies.
 
 2) Bcftools requires vcf files to be zipped and indexed
 
-<code> $> bgzip in.vcf 
-       $> tabix in.vcf.gz </code> 
+<code> $> bgzip in.vcf </code>
+<code> $> tabix in.vcf.gz </code> 
+
 You will have in.vcf.gz (instead of in.vcf) and in.vcf.gz.tbi. 
 
