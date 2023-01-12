@@ -153,15 +153,17 @@ void gdm(double p, double * mm)
 int usage()
 {
 	fprintf(stderr, "\n");
-	fprintf(stderr, "Program: kindred (kinship and inbreeding coefficients)\n");
+	fprintf(stderr, "Program: kindred (infer kinship and inbreeding coefficients)\n");
 	fprintf(stderr, "Version: %s\n", VERSION);
-	fprintf(stderr, "Usage:   kindred [-i] in.vcf.gz [-abot]\n");
+	fprintf(stderr, "Usage:   kindred -i in.vcf.gz [-abkot]\n");
 	fprintf(stderr, "Options: \n");
 	fprintf(stderr, "         -a str        INFO/AF tag in vcf file [AF]\n");
 	fprintf(stderr, "         -b int        number of allele freq bins [100]\n");
-	fprintf(stderr, "         -i str        (indexed) bgzipped vcf file \n");
+	fprintf(stderr, "         -i str        (indexed) bgzipped vcf file\n");
+	fprintf(stderr, "         -k            on writing .kin file [off]\n");
 	fprintf(stderr, "         -o str        output prefix [out]\n");
-	fprintf(stderr, "         -t int        number of thread [4]\n");
+	fprintf(stderr, "         -t int        number of thread [8]\n\n");
+	fprintf(stderr, "User Manual can be found at github.com/haplotype/kindred\n");
 	fprintf(stderr, "Bug report: Yongtao Guan <ytguan@gmail.com>\n\n");
 	return 1;
 }
@@ -169,97 +171,129 @@ int usage()
 
 int main(int argc, char *argv[])
 {
-        time_t time0, time1, time2; 
-	string fn_vcf; 
+    time_t time0, time1, time2; 
+    string fn_vcf; 
 //	string fn_af; 
 //	string fn_gt; 
-	string pref("out");
-	string af_tag("AF"); 
-	char c;
-        gdadu.nb = 100; //number of frequency bins; 
-	gdadu.nth = 8; 
+    string pref("out");
+    string af_tag("AF"); 
+    char c;
+    int kin_flag = 0;           
+    int vcf_flag = 0; 
+    gdadu.nb = 100; //number of frequency bins; 
+    gdadu.nth = 8; 
 
-	while ((c = getopt(argc, argv, "a:b:i:o:t:")) >= 0) 
-	{
-	    switch (c) {
-		case 'a': 
-		    af_tag.assign(optarg); 
-		    break; 
-		case 'b': 
-		    gdadu.nb = atoi(optarg); 
-		    break;
-		case 'i': 
-		    fn_vcf.assign(optarg); 
-		    break;
-		case 'o': 
-		    pref.assign(optarg); 
-		    break;
-		case 't': 
-		    gdadu.nth = atoi(optarg); 
-		    break;
-		default: 
-		    break; 
-	    }
+    while ((c = getopt(argc, argv, "a:b:i:ko:t:")) >= 0) 
+    {
+	switch (c) {
+	    case 'a': 
+		af_tag.assign(optarg); 
+		break; 
+	    case 'b': 
+		gdadu.nb = atoi(optarg); 
+		break;
+	    case 'i': 
+		vcf_flag = 1; 
+		fn_vcf.assign(optarg); 
+		break;
+	    case 'k': 
+		kin_flag = 1; 
+		break;
+	    case 'o': 
+		pref.assign(optarg); 
+		break;
+	    case 't': 
+		gdadu.nth = atoi(optarg); 
+		break;
+	    default: 
+		break; 
 	}
-    
-//	std::cout << argc << " " << optind << std::endl; 
-	if(argc > optind) 
-	    fn_vcf.assign(argv[argc-1]); 
-	if (argc < 2) return usage();
+    }
 
-       time0 = time(NULL); 
-       vector<float> vaf; 
-        vector<uint8_t> v8; 
-	//open vcf file; 
-	htsFile *fpv = hts_open(fn_vcf.c_str(), "r");   
-	bcf_hdr_t *hdr = bcf_hdr_read(fpv);  
-	bcf1_t* line = bcf_init();   
-	gdadu.ni = bcf_hdr_nsamples(hdr); 
-	cout << "total number of samples = " << gdadu.ni << endl; 
+//	std::cout << argc << " " << optind << std::endl; 
+//    if(argc > optind) 
+//	fn_vcf.assign(argv[argc-1]); 
+    //this seems not working with mac version of getopt. 
+    if (vcf_flag == 0) return usage();
+
+    FILE * fp1 = NULL;
+    FILE * fp2 = NULL;
+    FILE * fplog;
+    string buf; 
+    buf.assign(pref); 
+    buf.append(".log");  
+    fplog = fopen(buf.c_str(), "w");
+    if (fplog == NULL) {
+	    fprintf(stderr, "can't open file %s\n", buf.c_str()); 
+	    exit(EXIT_FAILURE);
+    }   // for SNPs. 
+    for (int i = 0; i < argc; i++)
+	fprintf(fplog, "%s ", argv[i]); 
+    fprintf(fplog, "\n"); 
+
+    time0 = time(NULL); 
+    vector<float> vaf; 
+    vector<uint8_t> v8; 
+    //open vcf file; 
+    htsFile *fpv = hts_open(fn_vcf.c_str(), "r");   
+    bcf_hdr_t *hdr = bcf_hdr_read(fpv);  
+    bcf1_t* line = bcf_init();   
+    gdadu.ni = bcf_hdr_nsamples(hdr); 
+    fprintf(fplog, "number of samples: %d \n", gdadu.ni); 
+    fprintf(stdout, "number of samples: %d \n", gdadu.ni); 
 //	if(hdr->samples != NULL) {
 //	    for (int i = 0; i < gdadu.ni; i++)
 //		cout << hdr->samples[i] << endl; 
 //	}
-	gdadu.ns = 0; 
-	int ns0 = 0; 
-	while(bcf_read1(fpv, hdr, line) == 0) {   
-	  
-	    bcf_get_variant_types(line); 
-	    if(line->d.var_type != VCF_SNP) continue; 
-	    if(line->n_allele > 2) continue;       
+    gdadu.ns = 0; 
+    int ns0 = 0; 
+    while(bcf_read1(fpv, hdr, line) == 0) {   
+      
+	bcf_get_variant_types(line); 
+	if(line->d.var_type != VCF_SNP) continue; 
+	if(line->n_allele > 2) continue;       
 
-    	    float * dst = NULL;
-	    int ndst = 0;
-	    double af = 0; 
-	    int dp_status = bcf_get_info_values(hdr, line, af_tag.c_str(),  (void**) &dst, &ndst, BCF_HT_REAL);
-	    if(dp_status > 0) af = dst[0]; 
-	    else ns0++; 
-//	    cout << dst[0] << "\t " << af << endl; 
-	    vaf.push_back(af); 
+	float * dst = NULL;
+	int ndst = 0;
+	double af = 0; 
+	int dp_status = bcf_get_info_values(hdr, line, af_tag.c_str(),  (void**) &dst, &ndst, BCF_HT_REAL);
+	if(dp_status > 0) {
+	    af = dst[0]; 
 	    free(dst); 
-			 
-	    int32_t *gt_arr = NULL, ngt_arr = 0;
-	    int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
-	    if ( ngt<=0 ) // GT not present 
-	    {
-		cout << "no genotypes at " << bcf_seqname(hdr, line) << " " << line->pos << endl; 
-		continue; 
-	    }
-     
-	    for (int i=0; i<gdadu.ni; i++)
-	    {
-		int gt = 3; 
-		if (gt_arr[2*i+0] != bcf_gt_missing && gt_arr[2*i+1] != bcf_gt_missing)
-		    gt = bcf_gt_allele(gt_arr[2*i+0]) + bcf_gt_allele(gt_arr[2*i+1]); 
-		v8.push_back(gt); 
-	   }
-	   free(gt_arr);
-	   gdadu.ns++; 
-	   if(gdadu.ns % 10000 == 0) 
-	       fprintf(stdout, "processed %d biallelic SNPs in vcf file \n", gdadu.ns); 
+	} else {
+	    ns0++; 
+	    free(dst); 
+	    continue; 
+	}
+	vaf.push_back(af); 
+		     
+	int32_t *gt_arr = NULL, ngt_arr = 0;
+	int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
+	if ( ngt<=0 ) // GT not present 
+	{
+	    cout << "no genotypes at " << bcf_seqname(hdr, line) << " " << line->pos << endl; 
+	    vaf.pop_back(); 
+	    continue; 
+	}
+ 
+	for (int i=0; i<gdadu.ni; i++)
+	{
+	    int gt = 3; 
+	    if (gt_arr[2*i+0] != bcf_gt_missing && gt_arr[2*i+1] != bcf_gt_missing)
+		gt = bcf_gt_allele(gt_arr[2*i+0]) + bcf_gt_allele(gt_arr[2*i+1]); 
+	    v8.push_back(gt); 
        }
-       cout << "total number of SNPs = " << gdadu.ns << endl; 
-       cout << "total number of SNPs without tag " << af_tag << " = " << ns0 << endl; 
+       free(gt_arr);
+       gdadu.ns++; 
+       if(gdadu.ns % 10000 == 0) 
+	   fprintf(stdout, "processed %d biallelic SNPs in vcf file \n", gdadu.ns); 
+    }
+   fprintf(fplog, "number of SNPs: %d \n", gdadu.ns); 
+   fprintf(fplog, "number of SNPs without tag: %s = %d \n", af_tag.c_str(), ns0); 
+//   cout << "number of SNPs = " << gdadu.ns << endl; 
+//   cout << "number of SNPs without tag " << af_tag << " = " << ns0 << endl; 
+   fprintf(stdout, "number of SNPs: %d \n", gdadu.ns); 
+   fprintf(stdout, "number of SNPs without tag: %s = %d \n", af_tag.c_str(), ns0); 
 
 
    gdadu.raf = new double[gdadu.ns]; //rounded allele frequency. 
@@ -291,17 +325,19 @@ int main(int argc, char *argv[])
    time1 = time(NULL); 
 
 //   double wt[9] = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 1, 1, 1}; 
-    FILE * fp1;
-    string buf; 
-    buf.assign(pref); 
-    buf.append(".kin");  
-    fp1 = fopen(buf.c_str(), "w");
-    if (fp1 == NULL) {
-	    fprintf(stderr, "can't open file %s\n", buf.c_str()); 
-	    exit(EXIT_FAILURE);
-    }   // for SNPs. 
+   if(kin_flag == 1) 
+   {
+	string buf; 
+	buf.assign(pref); 
+	buf.append(".kin");  
+	fp1 = fopen(buf.c_str(), "w");
+	if (fp1 == NULL) {
+		fprintf(stderr, "can't open file %s\n", buf.c_str()); 
+		exit(EXIT_FAILURE);
+	}   // for SNPs. 
+   	fprintf(fp1, "ID1 ID2 phi sumd d1 d2 d3 d4 d5 d6 d7 d8 d9\n"); 
+   }
 
-    FILE * fp2;
     buf.assign(pref); 
     buf.append(".grm");  
     fp2 = fopen(buf.c_str(), "w");
@@ -313,8 +349,6 @@ int main(int argc, char *argv[])
    //if i save upper triangular matrix linearly. 
    //how to efficienty recover coordinates from linear poistion?  
 
-
-    fprintf(fp1, "ID1 ID2 phi sumd d1 d2 d3 d4 d5 d6 d7 d8 d9\n"); 
 
 ///////////////////////////////////////////////////////
     threadpool thpool = thpool_init(gdadu.nth);
@@ -336,18 +370,21 @@ int main(int argc, char *argv[])
 	       thpool_wait(thpool); 
 ///////////////////////////////////////////////////////
 	       fprintf(stdout, "processed %ld many pair of samples \n", tiktok); 
-	       for (long i = tiktok - load;  i < tiktok; i++)
+	       if(kin_flag == 1) 
 	       {
-		   long idx = tr2sq[i]; 
-                   int i1 = idx / gdadu.ni; 
-		   int i2 = idx % gdadu.ni; 
-		   if(hdr->samples != NULL) 
-			fprintf(fp1, "%s %s ", hdr->samples[i1], hdr->samples[i2]); 
-		   else 
-			fprintf(fp1, "id%d id%d ", i1, i2); 
-		   for (int c = 0; c < 11; c++)
-		       fprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
-		   fprintf(fp1, "\n"); 
+		   for (long i = tiktok - load;  i < tiktok; i++)
+		   {
+		       long idx = tr2sq[i]; 
+		       int i1 = idx / gdadu.ni; 
+		       int i2 = idx % gdadu.ni; 
+		       if(hdr->samples != NULL) 
+			    fprintf(fp1, "%s %s ", hdr->samples[i1], hdr->samples[i2]); 
+		       else 
+			    fprintf(fp1, "id%d id%d ", i1, i2); 
+		       for (int c = 0; c < 11; c++)
+			   fprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
+		       fprintf(fp1, "\n"); 
+		   }
 	       }
 	       load = 0; 
 	   }
@@ -358,7 +395,8 @@ int main(int argc, char *argv[])
     thpool_wait(thpool);
     thpool_destroy(thpool);
 ///////////////////////////////////////////////////////
-    if(load < gdadu.nth * 1000) {
+    if(kin_flag == 1) 
+    {
        for (long i = tiktok - load;  i < tiktok; i++)
        {
 	   long idx = tr2sq[i]; 
@@ -372,19 +410,8 @@ int main(int argc, char *argv[])
 	       fprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
 	   fprintf(fp1, "\n"); 
        }
+       fclose(fp1); 
     }
-//    for (int ii = 0, k = 0; ii < gdadu.ni; ii++)
-//       for (int jj = ii; jj < gdadu.ni; jj++, k++)
-//       {
-//	   if(hdr->samples != NULL) 
-//		fprintf(fp1, "%s %s ", hdr->samples[ii], hdr->samples[jj]); 
-//	   else 
-//		fprintf(fp1, "id%d id%d ", ii, jj); 
-//	   for (int c = 0; c < 11; c++)
-//	       fprintf(fp1, "%8.6f ", gdadu.kin[k][c]); 
-//	   fprintf(fp1, "\n"); 
-//       }
-    fclose(fp1); 
 
     for (int i = 0; i < gdadu.ni; i++)
     {
