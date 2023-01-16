@@ -9,9 +9,8 @@ Kindred uses multi-threading to speed up calculation and user can specify the nu
 
 ## Output
 Kindred by default outputs two files: pref.log and pref.grm, where pref can be specified with -o option. 
-In pref.grm, the first line contains individual ID. The rest is an $n\times n$ square matrix with 6 digits accuracy. The $i$-th row and $j$-th column is $2\phi_{ij}$. 
+In pref.grm is an $n\times n$ square matrix of $(2\phi_{ij})$ with 6 digits accuracy. The samples have the same order as in the vcf file.   
 
-    pg1 pg2 pg3 pg4 pg5 pg6 ...  
     1.000276 0.000000 0.480721 0.473312 0.000000 0.000000 ...
     0.000000 0.998443 0.468201 0.478238 0.000000 0.000000 ...
     0.480721 0.468201 0.999667 0.502964 0.000000 0.000000 ...
@@ -20,6 +19,7 @@ In pref.grm, the first line contains individual ID. The rest is an $n\times n$ s
     0.000000 0.000000 0.000000 0.000000 0.000000 0.999693 ...
     ...
 
+       
 With -k option, Kindred willl also output a large file pref.kin, with a space delimited header, and $(n+1)n/2$ additional lines. 
 
     ID1 ID2 phi sumd d1 d2 d3 d4 d5 d6 d7 d8 d9
@@ -107,4 +107,9 @@ You will have in.vcf.gz (instead of in.vcf) and in.vcf.gz.tbi.
 3) print all INFO tags in in.vcf.gz 
        
        $ bcftools query -f '%INFO\n' in.vcf.gz | head -n 2 
+       
+4) The order of the sample can be obtained from vcf files by  
+
+       $ bcftools query -l in.vfc.gz
+       
        
