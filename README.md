@@ -92,7 +92,7 @@ To prepare a vcf file with CEU allele frequencies.
      $ bcftools view -S ceu.samples.list annotate --remove INFO plugin fill-tags | \
         bcftools view -G > annotation.ceu 
 
-## Other useful tips. 
+## Some tips 
 1) plink can convert plink format to vcf format
 
        $ plink --bfile prefix --recode vcf --out in
