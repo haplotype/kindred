@@ -8,8 +8,8 @@ User can also specify other tag name, such as EUR_AF or EAS_AF in the 1000 genom
 Kindred uses multi-threading to speed up calculation and user can specify the number of threads with -t option. 
 
 ## Output
-Kindred by default outputs two files: pref.log and pref.grm, where pref can be specified with -o option. 
-In pref.grm is an $n\times n$ square matrix of $(2\phi_{ij})$ with 6 digits accuracy. The samples have the same order as in the vcf file.   
+Kindred by default outputs three files: pref.log, pref.rkm.gz (rkm stands for realized kinship matrix), and pref.kin.gz where pref can be specified with -o option. 
+In pref.rkm.gz is an $n\times n$ square matrix of $(2\phi_{ij})$ with 6 digits accuracy. The samples have the same order as in the vcf file.   
 
     1.000276 0.000000 0.480721 0.473312 0.000000 0.000000 ...
     0.000000 0.998443 0.468201 0.478238 0.000000 0.000000 ...
@@ -20,7 +20,7 @@ In pref.grm is an $n\times n$ square matrix of $(2\phi_{ij})$ with 6 digits accu
     ...
 
        
-With -k option, Kindred willl also output a large file pref.kin, with a space delimited header, and $(n+1)n/2$ additional lines. 
+In pref.kin.gz, the first line is a space delimited header, and rest are the pairwise kinship (including one and itself) and the detailed parameter estimates, total $(n+1)n/2$ lines. This output can be turned off by -k option. 
 
     ID1 ID2 phi sumd d1 d2 d3 d4 d5 d6 d7 d8 d9
     pg1 pg1 0.50014 1.00051 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 1.00028 0.00000 0.00023 
@@ -30,7 +30,7 @@ With -k option, Kindred willl also output a large file pref.kin, with a space de
     pg1 pg5 0.00000 0.99922 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 0.99922
     ...
 
-ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilities of Jacquard latent states, and sumd is the sum of the nine probabilities, should be close to $1$. Significant departure from $1$ suggest ill fit.  
+ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilities of Jacquard latent states, and sumd is the sum of the nine probabilities, should be close to $1$. Significant departure from $1$ suggest ill fit, usually caused by misspecification of allele frequencies.  
   
 
 ## Usage examples
@@ -43,19 +43,19 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 
        $ bcftools plugin fill-tags in.vcf.gz | kindred -i - -o pref 
 
-3) If in.vcf.gz contain AF tag, but you want to recomputed it anyway:  
+3) If in.vcf.gz contains a AF tag, command in 2) will replace AF values, but if you insist you can remove the original tag first:  
 
        $ bcftools annotate --remove INFO in.vcf.gz | bcftools plugin fill-tags | \
           kindred -i - -o pref 
 
 4) You may store precomputed allele frequencies in a vcf file "annotate.vcf.gz". Kindred can use the allele frequencies by  
 
-       $ bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz  | \
+       $ bcftools annotate -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz  | \
           kindred -i - -o pref 
 
 5) You may store multiple allele frequencies in an annoation file, and you want use EUR_AF instead of EAS_AF or AFR_AF: 
   
-       $ bcftools annotate --remove INFO -c 'INFO/EUR_AF' -a annotate.vcf.gz in.vcf.gz  | \
+       $ bcftools annotate -c 'INFO/EUR_AF' -a annotate.vcf.gz in.vcf.gz  | \
           kindred -i - -o pref -a EUR_AF
 
 6) You may use markers on chromosome 8 (or a region) to compute kinship with sample estimated allele frquencies:  
@@ -65,7 +65,7 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 
 7) You may do it with allele frequencies stored in an annotation file:   
 
-       $ bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz filter -r 8 | \
+       $ bcftools annotate -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz filter -r 8 | \
           kindred -i - -o test.chr8 
 
 
