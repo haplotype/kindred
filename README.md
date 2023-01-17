@@ -39,31 +39,35 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
     
        $ kindred -i in.vcf.gz -o pref 
 
-2) If in.vcf.gz has no AF tag, and one wants to use allele frequencies estimated from genotypes in the vcf file: 
+2) If the pairwise kinship computation appears slow and you have many idle cores: 
+
+       $ kindred -i in.vcf.gz -o pref -t 50
+
+3) If in.vcf.gz has no AF tag, and one wants to use allele frequencies estimated from genotypes in the vcf file: 
 
        $ bcftools plugin fill-tags in.vcf.gz | kindred -i - -o pref 
 
-3) If in.vcf.gz contains a AF tag, command in 2) will replace AF values, but if you insist you can remove the original tag first:  
+4) If in.vcf.gz contains a AF tag, command in 2) will replace AF values, but if you insist you can remove the original tag first:  
 
        $ bcftools annotate --remove INFO in.vcf.gz | bcftools plugin fill-tags | \
           kindred -i - -o pref 
 
-4) You may store precomputed allele frequencies in a vcf file "annotate.vcf.gz". Kindred can use the allele frequencies by  
+5) You may store precomputed allele frequencies in a vcf file "annotate.vcf.gz". Kindred can use the allele frequencies by  
 
        $ bcftools annotate -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz  | \
           kindred -i - -o pref 
 
-5) You may store multiple allele frequencies in an annoation file, and you want use EUR_AF instead of EAS_AF or AFR_AF: 
+6) You may store multiple allele frequencies in an annoation file, and you want use EUR_AF instead of EAS_AF or AFR_AF: 
   
        $ bcftools annotate -c 'INFO/EUR_AF' -a annotate.vcf.gz in.vcf.gz  | \
           kindred -i - -o pref -a EUR_AF
 
-6) You may use markers on chromosome 8 (or a region) to compute kinship with sample estimated allele frquencies:  
+7) You may use markers on chromosome 8 (or a region) to compute kinship with sample estimated allele frquencies:  
 
        $ bcftools filter -r 8 in.vcf.gz | bcftools plugin fill-tags  | \
           kindred -i - -o test.chr8
 
-7) You may do it with allele frequencies stored in an annotation file:   
+8) You may do it with allele frequencies stored in an annotation file:   
 
        $ bcftools annotate -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz filter -r 8 | \
           kindred -i - -o test.chr8 
