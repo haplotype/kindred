@@ -47,9 +47,13 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 
        $ bcftools plugin fill-tags in.vcf.gz | kindred -i - -o pref 
 
+    or equivalently:
+    
+       $ bcftools +fill-tags in.vcf.gz | kindred -i - -o pref 
+
 4) If in.vcf.gz contains a AF tag, command in 2) will replace AF values, but if you insist you can remove the original tag first:  
 
-       $ bcftools annotate --remove INFO in.vcf.gz | bcftools plugin fill-tags | \
+       $ bcftools annotate --remove INFO in.vcf.gz | bcftools +fill-tags | \
           kindred -i - -o pref 
 
 5) You may store precomputed allele frequencies in a vcf file "annotate.vcf.gz". Kindred can use the allele frequencies by  
@@ -64,7 +68,7 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 
 7) You may use markers on chromosome 8 (or a region) to compute kinship with sample estimated allele frquencies:  
 
-       $ bcftools filter -r 8 in.vcf.gz | bcftools plugin fill-tags  | \
+       $ bcftools filter -r 8 in.vcf.gz | bcftools +fill-tags  | \
           kindred -i - -o test.chr8
 
 8) You may do it with allele frequencies stored in an annotation file:   
@@ -93,7 +97,7 @@ We can then use FST to filter SNPs that to be annotated.
 
 To prepare a vcf file with CEU allele frequencies.  
 
-     $ bcftools view -S ceu.samples.list annotate --remove INFO plugin fill-tags | \
+     $ bcftools view -S ceu.samples.list annotate --remove INFO +fill-tags | \
         bcftools view -G > annotation.ceu 
 
 ## Some tips 
