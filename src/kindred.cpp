@@ -42,13 +42,14 @@
 //#include "gsl/gsl_linalg.h"
 #include <pthread.h>
 #include <stdint.h>
+#include <zlib.h>
 #include "thpool.h"
 
 
 using namespace std; 
 
-#define VERSION "0.3"
-
+#define VERSION "0.7"
+//18 Jan 2023
 typedef struct KData {
     double * grm; 
     double ** kin; 
@@ -66,6 +67,7 @@ map<long, long> sq2tr;
 //global data for multithreading. 
 
 void jacquard(void *par);  
+int make_grm(string fn, string pref, int); 
 
 double ** Allocate2DMatrix(int dim1, int dim2)
 {
@@ -150,18 +152,50 @@ void gdm(double p, double * mm)
 	    mm[k] = tt[i][j]; 
 }
 
+void print_progress_num(int last, int p)
+{
+    if(!last) {
+	printf("processed variants = %d \r", p); 
+	fflush(stdout); 	
+    } else {
+	printf("processed variants = %d \n", p); 
+    }
+}
+
+void print_progress_bar(int last, long p, long total)
+{
+    char str[] = "processed pairs:"; 
+    int progress = (int) (100.0 * p / total); 
+//    int barsize = (int) (progress / 2.0); 
+//    char bar[100];
+//    memset(bar, '\0', 100); 
+    if(!last) {
+//	    for (int i = 0; i < barsize; i++)
+//		    bar[i] = '>'; 
+	    printf("%s %ld or %d%%\r", str, p, progress); 
+	    fflush(stdout); 	
+    } else {
+//	    for (int i = 0; i < barsize; i++)
+//		    bar[i] = '>'; 
+//	    printf("%s [%-50s] 100%%\n", str, bar); 
+	    printf("%s %ld or %d%%\r", str, p, progress); 
+    }
+}
+
 int usage()
 {
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Program: kindred (infer kinship and inbreeding coefficients)\n");
 	fprintf(stderr, "Version: %s\n", VERSION);
-	fprintf(stderr, "Usage:   kindred -i in.vcf.gz [-abkot]\n");
+	fprintf(stderr, "Usage:   kindred -i in.vcf.gz [-abgkost]\n");
 	fprintf(stderr, "Options: \n");
 	fprintf(stderr, "         -a str        INFO/AF tag in vcf file [AF]\n");
 	fprintf(stderr, "         -b int        number of allele freq bins [100]\n");
+	fprintf(stderr, "         -g str        convert a grm(.gz) to gcta format\n");
 	fprintf(stderr, "         -i str        (indexed) bgzipped vcf file\n");
 	fprintf(stderr, "         -k            on writing .kin file [off]\n");
 	fprintf(stderr, "         -o str        output prefix [out]\n");
+//	fprintf(stderr, "         -s num        line to skip in -g\n");
 	fprintf(stderr, "         -t int        number of thread [8]\n\n");
 	fprintf(stderr, "User Manual can be found at github.com/haplotype/kindred\n");
 	fprintf(stderr, "Bug report: Yongtao Guan <ytguan@gmail.com>\n\n");
@@ -178,12 +212,18 @@ int main(int argc, char *argv[])
     string pref("out");
     string af_tag("AF"); 
     char c;
-    int kin_flag = 0;           
+    int kin_flag = 1;           
     int vcf_flag = 0; 
+    string fn_grm; 
+    int gcta_flag = 0; 
+    string fn_gt; 
+    int gt_flag = 0; //input is 012 ns x ni matrix; 
+
+    int lskip = 0; 
     gdadu.nb = 100; //number of frequency bins; 
     gdadu.nth = 8; 
 
-    while ((c = getopt(argc, argv, "a:b:i:ko:t:")) >= 0) 
+    while ((c = getopt(argc, argv, "a:b:g:i:j:ko:s:t:")) >= 0) 
     {
 	switch (c) {
 	    case 'a': 
@@ -192,15 +232,26 @@ int main(int argc, char *argv[])
 	    case 'b': 
 		gdadu.nb = atoi(optarg); 
 		break;
+	    case 'g': 
+		fn_grm.assign(optarg); 
+		gcta_flag = 1; 
+		break;
 	    case 'i': 
 		vcf_flag = 1; 
 		fn_vcf.assign(optarg); 
 		break;
+	    case 'j': 
+		gt_flag = 1; 
+		fn_gt.assign(optarg); 
+		break;
 	    case 'k': 
-		kin_flag = 1; 
+		kin_flag = 1-kin_flag; 
 		break;
 	    case 'o': 
 		pref.assign(optarg); 
+		break;
+	    case 's': 
+		lskip = atoi(optarg); 
 		break;
 	    case 't': 
 		gdadu.nth = atoi(optarg); 
@@ -214,11 +265,13 @@ int main(int argc, char *argv[])
 //    if(argc > optind) 
 //	fn_vcf.assign(argv[argc-1]); 
     //this seems not working with mac version of getopt. 
-    if (vcf_flag == 0) return usage();
+    if(gcta_flag == 1) return make_grm(fn_grm, pref, lskip); 
+    if (vcf_flag == 0 && gt_flag == 0) return usage();
+    fprintf(stdout, "Kindred 0.7 by Yongtao Guan @ Framingham Heart Study, NHLBI (C) 2023 \n"); 
 
-    FILE * fp1 = NULL;
-    FILE * fp2 = NULL;
-    FILE * fplog;
+    gzFile fp1 = NULL;
+    gzFile fp2 = NULL;
+    FILE * fplog = NULL;
     string buf; 
     buf.assign(pref); 
     buf.append(".log");  
@@ -235,66 +288,132 @@ int main(int argc, char *argv[])
     vector<float> vaf; 
     vector<uint8_t> v8; 
     //open vcf file; 
-    htsFile *fpv = hts_open(fn_vcf.c_str(), "r");   
-    bcf_hdr_t *hdr = bcf_hdr_read(fpv);  
-    bcf1_t* line = bcf_init();   
-    gdadu.ni = bcf_hdr_nsamples(hdr); 
-    fprintf(fplog, "number of samples: %d \n", gdadu.ni); 
-    fprintf(stdout, "number of samples: %d \n", gdadu.ni); 
-//	if(hdr->samples != NULL) {
-//	    for (int i = 0; i < gdadu.ni; i++)
-//		cout << hdr->samples[i] << endl; 
-//	}
-    gdadu.ns = 0; 
-    int ns0 = 0; 
-    while(bcf_read1(fpv, hdr, line) == 0) {   
-      
-	bcf_get_variant_types(line); 
-	if(line->d.var_type != VCF_SNP) continue; 
-	if(line->n_allele > 2) continue;       
 
-	float * dst = NULL;
-	int ndst = 0;
-	double af = 0; 
-	int dp_status = bcf_get_info_values(hdr, line, af_tag.c_str(),  (void**) &dst, &ndst, BCF_HT_REAL);
-	if(dp_status > 0) {
-	    af = dst[0]; 
-	    free(dst); 
-	} else {
-	    ns0++; 
-	    free(dst); 
-	    continue; 
-	}
-	vaf.push_back(af); 
-		     
-	int32_t *gt_arr = NULL, ngt_arr = 0;
-	int ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
-	if ( ngt<=0 ) // GT not present 
-	{
-	    cout << "no genotypes at " << bcf_seqname(hdr, line) << " " << line->pos << endl; 
-	    vaf.pop_back(); 
-	    continue; 
-	}
- 
-	for (int i=0; i<gdadu.ni; i++)
-	{
-	    int gt = 3; 
-	    if (gt_arr[2*i+0] != bcf_gt_missing && gt_arr[2*i+1] != bcf_gt_missing)
-		gt = bcf_gt_allele(gt_arr[2*i+0]) + bcf_gt_allele(gt_arr[2*i+1]); 
-	    v8.push_back(gt); 
+    int ns1 = 0; 
+    if(vcf_flag == 1) 
+    {
+	htsFile *fpv = hts_open(fn_vcf.c_str(), "r");   
+	bcf_hdr_t *hdr = bcf_hdr_read(fpv);  
+	bcf1_t* line = bcf_init();   
+	gdadu.ni = bcf_hdr_nsamples(hdr); 
+	fprintf(fplog, "number of samples: %d \n", gdadu.ni); 
+	fprintf(stdout, "number of samples: %d \n", gdadu.ni); 
+    //	if(hdr->samples != NULL) {
+    //	    for (int i = 0; i < gdadu.ni; i++)
+    //		cout << hdr->samples[i] << endl; 
+    //	}
+	gdadu.ns = 0; 
+	int ns0 = 0; 
+	while(bcf_read1(fpv, hdr, line) == 0) {   
+	    float * dst = NULL;
+	    int ndst = 0;
+	    double af = 0; 
+	    int dp_status = 0; 
+
+	    int32_t *gt_arr = NULL, ngt_arr = 0;
+            int ngt;
+
+	    bcf_get_variant_types(line); 
+	    if(line->d.var_type != VCF_SNP) goto label; 
+	    if(line->n_allele > 2) goto label;       
+
+	    dp_status = bcf_get_info_values(hdr, line, af_tag.c_str(),  (void**) &dst, &ndst, BCF_HT_REAL);
+	    if(dp_status > 0) {
+		af = dst[0]; 
+		free(dst); 
+	    } else {
+		ns0++; 
+		free(dst); 
+		goto label; 
+	    }
+	    vaf.push_back(af); 
+			 
+	    ngt = bcf_get_genotypes(hdr, line, &gt_arr, &ngt_arr);
+	    if ( ngt<=0 ) // GT not present 
+	    {
+		cout << "no genotypes at " << bcf_seqname(hdr, line) << " " << line->pos << endl; 
+		vaf.pop_back(); 
+		goto label; 
+	    }
+     
+	    for (int i=0; i<gdadu.ni; i++)
+	    {
+		float gt = 3; 
+		if (gt_arr[2*i+0] != bcf_gt_missing && gt_arr[2*i+1] != bcf_gt_missing)
+		    gt = bcf_gt_allele(gt_arr[2*i+0]) + bcf_gt_allele(gt_arr[2*i+1]); 
+		v8.push_back(gt); 
+	   }
+	   free(gt_arr);
+	   gdadu.ns++; 
+
+	   label:  
+	   ns1++; 
+	   if(ns1 % 1000 == 0) 
+	       print_progress_num(0, ns1);  
        }
-       free(gt_arr);
-       gdadu.ns++; 
-       if(gdadu.ns % 10000 == 0) 
-	   fprintf(stdout, "processed %d biallelic SNPs in vcf file \n", gdadu.ns); 
+       fprintf(fplog, "number of biallelic SNPs: %d \n", gdadu.ns); 
+       fprintf(fplog, "number of biallelic SNPs without tag: %s = %d \n", af_tag.c_str(), ns0); 
+       print_progress_num(1, ns1);  
+       fprintf(stdout, "processed SNPs without %s tag = %d \n", af_tag.c_str(), ns0); 
+       fflush(fplog); 
+       hts_close(fpv); 
+       if(gdadu.ns == 0 || ns0 == gdadu.ns) 
+       {
+	   fprintf(fplog, "no SNPs with AF tag. abort. \n"); 
+	   fprintf(stdout, "no SNPs with AF tag. abort. \n"); 
+	   fflush(fplog); 
+           fclose(fplog); 
+	   exit(0); 
+       }
     }
-   fprintf(fplog, "number of SNPs: %d \n", gdadu.ns); 
-   fprintf(fplog, "number of SNPs without tag: %s = %d \n", af_tag.c_str(), ns0); 
-//   cout << "number of SNPs = " << gdadu.ns << endl; 
-//   cout << "number of SNPs without tag " << af_tag << " = " << ns0 << endl; 
-   fprintf(stdout, "number of SNPs: %d \n", gdadu.ns); 
-   fprintf(stdout, "number of SNPs without tag: %s = %d \n", af_tag.c_str(), ns0); 
 
+    if(gt_flag == 1) 
+    {
+	ifstream fin; // indata is like cin
+	float num; 
+	fin.open(fn_gt); // opens the file
+	if(!fin) { // file couldn't be opened
+	  cerr << "Error: file could not be opened" << endl;
+	  exit(1);
+	}                     
+	string line; 
+
+	gdadu.ns = 0; 
+        while (std::getline(fin, line))
+             ++gdadu.ns;
+        //cout lines; 
+	fin.clear();
+	fin.seekg(0, ios::beg);
+	//rewind; 
+
+	fin >> num;
+	while ( !fin.eof() ) { // keep reading until end-of-file
+	//      cout << "The next number is " << num << endl;
+	      v8.push_back(num); 
+	  fin >> num; // sets EOF flag if no value found
+	}
+	fin.close();
+
+	gdadu.ni = v8.size() / gdadu.ns; 
+	for(int m = 0; m < gdadu.ns; m++)
+	{
+	    float sum = 0; 
+	    for (int i = 0; i < gdadu.ni; i++)
+	    {
+		float gt = v8.at(m*gdadu.ni+i); 
+//		if(m == 0) 
+//		    cout << gt << " " << endl;  
+		sum += gt; 
+	    }
+	    float af = sum/(2.0*gdadu.ni); 
+//	    cout << af << endl; 
+	    vaf.push_back(af); 
+	}
+//	cout << v8.size() << endl; 
+	cout << gdadu.ni << endl; 
+	cout << gdadu.ns << endl; 
+//	cout << vaf.size() << endl; 
+    }
 
    gdadu.raf = new double[gdadu.ns]; //rounded allele frequency. 
    for (int m = 0; m < gdadu.ns; m++)
@@ -320,7 +439,7 @@ int main(int argc, char *argv[])
 		   tr2sq[tr] = sq; 
 		   sq2tr[sq] = tr;
        }
-   //global map for exchange indices; 
+   //global map for exchange indices; upper triangular to full matrix. 
 
    time1 = time(NULL); 
 
@@ -329,18 +448,18 @@ int main(int argc, char *argv[])
    {
 	string buf; 
 	buf.assign(pref); 
-	buf.append(".kin");  
-	fp1 = fopen(buf.c_str(), "w");
+	buf.append(".kin.gz");  
+	fp1 = gzopen(buf.c_str(), "w");
 	if (fp1 == NULL) {
 		fprintf(stderr, "can't open file %s\n", buf.c_str()); 
 		exit(EXIT_FAILURE);
 	}   // for SNPs. 
-   	fprintf(fp1, "ID1 ID2 phi sumd d1 d2 d3 d4 d5 d6 d7 d8 d9\n"); 
+   	gzprintf(fp1, "ID1 ID2 phi sumd d1 d2 d3 d4 d5 d6 d7 d8 d9\n"); 
    }
 
     buf.assign(pref); 
-    buf.append(".grm");  
-    fp2 = fopen(buf.c_str(), "w");
+    buf.append(".rkm.gz");  
+    fp2 = gzopen(buf.c_str(), "w");
     if (fp2 == NULL) {
 	    fprintf(stderr, "can't open file %s\n", buf.c_str()); 
 	    exit(EXIT_FAILURE);
@@ -350,16 +469,18 @@ int main(int argc, char *argv[])
    //how to efficienty recover coordinates from linear poistion?  
 
 
+    fprintf(fplog, "init thread pool n = %d\n", gdadu.nth); 
+    fprintf(stdout, "init thread pool n = %d\n", gdadu.nth); 
 ///////////////////////////////////////////////////////
     threadpool thpool = thpool_init(gdadu.nth);
 ///////////////////////////////////////////////////////
 
     int load = 0; 
     long tiktok = 0; 
+    long total = gdadu.ni * (gdadu.ni+1) / 2; 
     for (int ii = 0; ii < gdadu.ni; ii++)
        for (int jj = ii; jj < gdadu.ni; jj++)
        {
-//	   long kk = ii * gdadu.ni + jj; 
 ///////////////////////////////////////////////////////
 	   thpool_add_work(thpool, jacquard, (void*)tiktok);
 ///////////////////////////////////////////////////////
@@ -369,7 +490,8 @@ int main(int argc, char *argv[])
 ///////////////////////////////////////////////////////
 	       thpool_wait(thpool); 
 ///////////////////////////////////////////////////////
-	       fprintf(stdout, "processed %ld many pair of samples \n", tiktok); 
+//	       fprintf(stdout, "processed %ld many pair of samples \n", tiktok); 
+	       print_progress_bar(0, tiktok, total); 
 	       if(kin_flag == 1) 
 	       {
 		   for (long i = tiktok - load;  i < tiktok; i++)
@@ -377,23 +499,26 @@ int main(int argc, char *argv[])
 		       long idx = tr2sq[i]; 
 		       int i1 = idx / gdadu.ni; 
 		       int i2 = idx % gdadu.ni; 
-		       if(hdr->samples != NULL) 
-			    fprintf(fp1, "%s %s ", hdr->samples[i1], hdr->samples[i2]); 
-		       else 
-			    fprintf(fp1, "id%d id%d ", i1, i2); 
+//		       if(hdr->samples != NULL) 
+//			    fprintf(fp1, "%s %s ", hdr->samples[i1], hdr->samples[i2]); 
+//		       else 
+			    gzprintf(fp1, "id%d id%d ", i1, i2); 
 		       for (int c = 0; c < 11; c++)
-			   fprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
-		       fprintf(fp1, "\n"); 
+			   gzprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
+		       gzprintf(fp1, "\n"); 
 		   }
 	       }
 	       load = 0; 
 	   }
     //	   jacquard((void*) par); 
        }
+       print_progress_bar(1, tiktok, total); 
 
 ///////////////////////////////////////////////////////
     thpool_wait(thpool);
     thpool_destroy(thpool);
+    fprintf(fplog, "destroyed thread pool. start to write output.\n"); 
+    fprintf(stdout, "destroyed thread pool. start to write output.\n"); 
 ///////////////////////////////////////////////////////
     if(kin_flag == 1) 
     {
@@ -402,25 +527,17 @@ int main(int argc, char *argv[])
 	   long idx = tr2sq[i]; 
 	   int i1 = idx / gdadu.ni; 
 	   int i2 = idx % gdadu.ni; 
-	   if(hdr->samples != NULL) 
-		fprintf(fp1, "%s %s ", hdr->samples[i1], hdr->samples[i2]); 
-	   else 
-		fprintf(fp1, "id%d id%d ", i1, i2); 
+//	   if(hdr->samples != NULL) 
+//		fprintf(fp1, "%s %s ", hdr->samples[i1], hdr->samples[i2]); 
+//	   else 
+		gzprintf(fp1, "id%d id%d ", i1, i2); 
 	   for (int c = 0; c < 11; c++)
-	       fprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
-	   fprintf(fp1, "\n"); 
+	       gzprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
+	   gzprintf(fp1, "\n"); 
        }
-       fclose(fp1); 
+       gzclose(fp1); 
     }
 
-    for (int i = 0; i < gdadu.ni; i++)
-    {
-	if(hdr->samples != NULL) 
-		fprintf(fp2, "%s ", hdr->samples[i]); 
-	else 
-		fprintf(fp2, "id%d ", i); 
-    }
-    fprintf(fp2, "\n"); 
     for (int ii = 0; ii < gdadu.ni; ii++)
     {
        for (int jj = 0; jj < gdadu.ni; jj++)
@@ -428,11 +545,12 @@ int main(int argc, char *argv[])
 	   long idx = 0; 
 	   if(ii > jj)  idx = sq2tr[(long) jj*gdadu.ni+ii]; 
 	   else idx = sq2tr[(long) ii*gdadu.ni+jj]; 
-	   fprintf(fp2, "%8.6f ", gdadu.grm[idx]); 
+//	   fprintf(fp2, "%8.6f ", gdadu.grm[idx]); 
+	   gzprintf(fp2, "%8.6f ", gdadu.grm[idx]); 
        }
-       fprintf(fp2, "\n"); 
+       gzprintf(fp2, "\n"); 
     }
-    fclose(fp2); 
+    gzclose(fp2); 
 
     time2 = time(NULL); 
     time_t dt1 = difftime(time1, time0); 
@@ -444,7 +562,6 @@ int main(int argc, char *argv[])
     delete[] gdadu.grm; 
     delete[] gdadu.gt; 
     delete[] gdadu.raf; 
-    hts_close(fpv); 
     return 0;
 }
 
@@ -507,6 +624,17 @@ void jacquard(void *par)
        count9[tn2*10+tgt2]+=1;  
        count1[tn2]+=1;  
    }
+           
+   int notwin = 0; 
+   for (int n = 0; n < nb; n++) 
+   {
+       int set[] = {1,2,3,5,6,7};
+       for(int j = 0; j < 6; j++)
+           notwin += count9[n*10 + set[j]]; 
+   }
+   //count genoytpes that are not AA AA, AB AB and BB BB. 
+   //if the count notwin === 0, then it's twin or self. 
+
    
 //	   build_matrix; 
    for (int n = 0; n < nb; n++) 
@@ -552,6 +680,7 @@ void jacquard(void *par)
        exit(0); 
    }  
    double phi=x[0]+ (x[2]+x[4]+x[6])/2+x[7]/4; 
+   if(notwin == 0 && phi < 0.5) phi = 0.5; 
    gdadu.grm[tiktok] = 2*phi; 
    double sumx = 0; 
    for (int i = 0; i < 9; i++)
@@ -568,4 +697,106 @@ void jacquard(void *par)
    Free2DMatrix(ste); 
    delete[] count9; 
    delete[] count1; 
+}
+
+//this convert grm matrix to gcta pre-format. 
+int make_grm(string fn, string pref, int lskip)
+{
+    gzFile fgz = gzopen(fn.c_str(), "rb"); 
+    if(fgz == NULL) {
+	    printf("can't open %s file to read. \n", fn.c_str()); 
+	    exit(0); 
+    }
+    
+   vector<double>  vv; // variable for input value
+   string buf; 
+    char c = gzgetc(fgz);  
+    int countr = 0; 
+    while (c != EOF)  {
+	if(c == '\r' || c == '\n')
+	    countr ++; 
+	if(countr >= lskip )  
+	    buf.push_back(c); 
+	c=gzgetc(fgz); 
+    }
+    cout << buf.size() << endl; 
+    cout << countr  << endl; 
+//    cout << buf << endl; 
+    char * dup = strdup(buf.c_str()); 
+//    return 0; 
+//    char * tok = strtok(dup, " \0"); 
+//    while(tok != NULL) {
+//	double num = atof(tok);  
+//	vv.push_back(num); 
+//	tok = strtok(NULL, " \0"); 
+//    }
+    for (char * tok = strtok(dup, " \r\n\0"); tok; tok = strtok(NULL, " \r\n\0"))
+    {
+	double num = atof(tok); 
+	vv.push_back(num); 
+    }
+    free(dup); 
+    buf.assign(""); 
+    
+    cout << vv.size() << endl; 
+//    for (unsigned i = 0; i < vv.size(); i++)
+//	cout << vv.at(i) << " "; 
+//    cout << endl; 
+	
+//   ifstream fin; // indata is like cin
+//   double num; 
+//   fin.open(fn); // opens the file
+//   if(!fin) { // file couldn't be opened
+//      cerr << "Error: file could not be opened" << endl;
+//      exit(1);
+//   }
+//   fin >> num;
+//   while ( !fin.eof() ) { // keep reading until end-of-file
+////      cout << "The next number is " << num << endl;
+//	  vv.push_back(num); 
+//      fin >> num; // sets EOF flag if no value found
+//   }
+//   fin.close();
+   int ni = sqrt(vv.size()); 
+   if(ni*ni != vv.size()) 
+   {
+       cerr << "not a square matrix, check if header is there" << endl; 
+       exit(0); 
+   }
+
+    string buf1(pref); 
+    buf1.append(".grm.gz"); 
+    gzFile fp1 = gzopen(buf1.c_str(), "wb"); 
+    if(fp1 == NULL) 
+    {
+	    printf("can't open %s file to write\n", buf1.c_str()); 
+	    exit(0); 
+    }
+//   FILE * fp1 = fopen(buf1.c_str(), "w");
+//   if (fp1 == NULL) {
+//	    fprintf(stderr, "can't open file %s\n", buf1.c_str()); 
+//	    exit(EXIT_FAILURE);
+//   }   // for SNPs. 
+   for (int i = 0; i < ni; i++)
+       for (int j = 0; j <= i; j++)
+       {
+	   char buf[256]; 
+	   sprintf(buf, "%d %d 100000 %7.6f\n", i+1, j+1, vv.at(i*ni+j));  
+	   gzprintf(fp1, "%s",  buf); 
+//	   fwrite(buf, sizeof(buf), 1, fp1); 
+       }
+   gzclose(fp1); 
+
+   string buf2(pref); 
+   buf2.append(".grm.id"); 
+   FILE * fp2 = fopen(buf2.c_str(), "w");
+   if (fp2 == NULL) {
+	    fprintf(stderr, "can't open file %s\n", buf2.c_str()); 
+	    exit(EXIT_FAILURE);
+   }   // for SNPs. 
+   for (int i = 0; i < ni; i++)
+       fprintf(fp2, "%d0000\t%d\n", i+1, i+1);  
+   fclose(fp2); 
+
+   return 0;
 }
