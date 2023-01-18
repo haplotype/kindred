@@ -61,7 +61,7 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
        bcftools annotate --remove INFO -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz  | \
           kindred -i - -o pref 
           
-   It's safe to use "--remove" before annotation as you might only have a subset of SNPs annotated. 
+   It's safe to use "--remove" before annotation as you might only have a subset of SNPs annotated and you want ignore the rest. 
 
 6) You may store multiple allele frequencies in an annoation file, and you want use EUR_AF instead of EAS_AF or AFR_AF: 
   
