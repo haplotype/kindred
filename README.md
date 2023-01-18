@@ -37,43 +37,43 @@ ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilitie
 
 1) If in.vcf.gz contains AF tag, one can simply do: 
     
-       $ kindred -i in.vcf.gz -o pref 
+       kindred -i in.vcf.gz -o pref 
 
 2) If the pairwise kinship computation appears slow and you have many idle cores: 
 
-       $ kindred -i in.vcf.gz -o pref -t 50
+       kindred -i in.vcf.gz -o pref -t 50
 
 3) If in.vcf.gz has no AF tag, and one wants to use allele frequencies estimated from genotypes in the vcf file: 
 
-       $ bcftools plugin fill-tags in.vcf.gz | kindred -i - -o pref 
+       bcftools plugin fill-tags in.vcf.gz | kindred -i - -o pref 
 
     or equivalently:
     
-       $ bcftools +fill-tags in.vcf.gz | kindred -i - -o pref 
+       bcftools +fill-tags in.vcf.gz | kindred -i - -o pref 
 
 4) If in.vcf.gz contains a AF tag, command in 2) will replace AF values, but if you insist you can remove the original tag first:  
 
-       $ bcftools annotate --remove INFO in.vcf.gz | bcftools +fill-tags | \
+       bcftools annotate --remove INFO in.vcf.gz | bcftools +fill-tags | \
           kindred -i - -o pref 
 
 5) You may store precomputed allele frequencies in a vcf file "annotate.vcf.gz". Kindred can use the allele frequencies by  
 
-       $ bcftools annotate -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz  | \
+       bcftools annotate -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz  | \
           kindred -i - -o pref 
 
 6) You may store multiple allele frequencies in an annoation file, and you want use EUR_AF instead of EAS_AF or AFR_AF: 
   
-       $ bcftools annotate -c 'INFO/EUR_AF' -a annotate.vcf.gz in.vcf.gz  | \
+       bcftools annotate -c 'INFO/EUR_AF' -a annotate.vcf.gz in.vcf.gz  | \
           kindred -i - -o pref -a EUR_AF
 
 7) You may use markers on chromosome 8 (or a region) to compute kinship with sample estimated allele frquencies:  
 
-       $ bcftools filter -r 8 in.vcf.gz | bcftools +fill-tags  | \
+       bcftools filter -r 8 in.vcf.gz | bcftools +fill-tags  | \
           kindred -i - -o test.chr8
 
 8) You may do it with allele frequencies stored in an annotation file:   
 
-       $ bcftools annotate -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz filter -r 8 | \
+       bcftools annotate -c 'INFO/AF' -a annotate.vcf.gz in.vcf.gz filter -r 8 | \
           kindred -i - -o test.chr8 
 
 
@@ -85,7 +85,7 @@ we downloaded 1000 genomes vcf and tbi files, they were arranged in different ch
 We first obtain all allelic SNPs with minimum of 50 counts of minor alleles (among 2504 samples).  
 for each SNP count AN-AC for different populations (the example below is for chr22 of CHB). 
 
-     $ bcftools view -m2 -M2 -v snps -c 50:minor ALL.chr22.phase3.genotypes.vcf.gz | \
+     bcftools view -m2 -M2 -v snps -c 50:minor ALL.chr22.phase3.genotypes.vcf.gz | \
         bcftools view -S samples.CHB.txt | bcftools annotate --remove INFO |\
         bcftools plugin fill-AN-AC | \
         bcftools query -f "%CHROM %POS %REF %ALT %INFO/AC %INFO/AN\n" > chb.chr22.an-ac
@@ -97,27 +97,27 @@ We can then use FST to filter SNPs that to be annotated.
 
 To prepare a vcf file with CEU allele frequencies.  
 
-     $ bcftools view -S ceu.samples.list annotate --remove INFO +fill-tags | \
+     bcftools view -S ceu.samples.list annotate --remove INFO +fill-tags | \
         bcftools view -G > annotation.ceu 
 
 ## Some tips 
 1) plink can convert plink format to vcf format
 
-       $ plink --bfile prefix --recode vcf --out in
+       plink --bfile prefix --recode vcf --out in
 
 2) Bcftools requires vcf files to be zipped and indexed
 
-       $ bgzip in.vcf 
-       $ tabix in.vcf.gz 
+       bgzip in.vcf 
+       tabix in.vcf.gz 
 
 You will have in.vcf.gz (instead of in.vcf) and in.vcf.gz.tbi. 
 
 3) print all INFO tags in in.vcf.gz 
        
-       $ bcftools query -f '%INFO\n' in.vcf.gz | head -n 2 
+       bcftools query -f '%INFO\n' in.vcf.gz | head -n 2 
        
 4) The order of the sample can be obtained from vcf files by  
 
-       $ bcftools query -l in.vfc.gz
+       bcftools query -l in.vfc.gz
        
        
