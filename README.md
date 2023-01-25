@@ -122,4 +122,9 @@ You will have in.vcf.gz (instead of in.vcf) and in.vcf.gz.tbi.
 
        bcftools query -l in.vfc.gz
        
+5) Rename chromosome name in vcf files.  
+
+       echo "22 chr22" > chr_name_conv.txt
+       bcftools annotate --rename-chrs chr_name_conv.txt input.chr22.vcf.gz | bgzip > output.22.vcf.gz
+       
        
