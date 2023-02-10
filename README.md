@@ -2,13 +2,18 @@
 
 Kindred is designed to infer kinship $\phi$ between a pair of samples accounting for inbreeding of the samples. This is done through modelling nine latent Jacquard IBD states. If the pair is one and itself, the kinship is $\phi = (1+F)/2$ where $F$ denotes inbreeding coefficient. 
 
+## Current version 0.8 10 Feb 2023
+
+Untar kindred.linux.tar to get an linux executable. 
+You may also compile from the source code in src/. 
+
 ## Input and options
 Kindred takes vcf file or stream as input with mandatory -i option. The vcf file must contain "INFO/AF" tag and biallelic genotypes. If the AF tag is not readily available, it can be populated by bcftools on the fly. 
 User can also specify other tag name, such as EUR_AF or EAS_AF in the 1000 genomes vcf files, via -a option. 
 Kindred uses multi-threading to speed up calculation and user can specify the number of threads with -t option. 
 
 ## Output
-Kindred by default outputs three files: pref.log, pref.rkm.gz (rkm stands for realized kinship matrix), and pref.kin.gz where pref can be specified with -o option. 
+Kindred by default outputs two files: pref.log and pref.rkm.gz (rkm stands for realized kinship matrix),  where pref can be specified with -o option. 
 In pref.rkm.gz is an $n\times n$ square matrix of $(2\phi_{ij})$ with 6 digits accuracy. The samples have the same order as in the vcf file.   
 
     1.000276 0.000000 0.480721 0.473312 0.000000 0.000000 ...
@@ -20,7 +25,7 @@ In pref.rkm.gz is an $n\times n$ square matrix of $(2\phi_{ij})$ with 6 digits a
     ...
 
        
-In pref.kin.gz, the first line is a space delimited header, and rest are the pairwise kinship (including one and itself) and the detailed parameter estimates, total $(n+1)n/2$ lines. This output can be turned off by -k option. 
+With -k option, Kindred can output an additional file pref.kin.gz.  The first line is a space delimited header, and rest are the pairwise kinship (including one and itself) and the detailed parameter estimates, total $(n+1)n/2$ lines. 
 
     ID1 ID2 phi sumd d1 d2 d3 d4 d5 d6 d7 d8 d9
     pg1 pg1 0.50014 1.00051 0.00000 0.00000 0.00000 0.00000 0.00000 0.00000 1.00028 0.00000 0.00023 
