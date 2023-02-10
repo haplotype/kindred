@@ -912,7 +912,8 @@ int nnls(
   /* Main loop; quit if all coefficients are already in the solution or
      if M cols of A have been triangulated */
   double up=0.0;
-  int itmax; if(n<3) itmax=n*3; else itmax=n*n;
+  int itmax = 200; 
+  /*if(n<3) itmax=n*3; else itmax=n*n; */
   int iter=0; 
   int k, j=0, jj=0;
   while(iz1<=iz2 && nsetp<m) {

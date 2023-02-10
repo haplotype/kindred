@@ -3,6 +3,7 @@
 # set mpi = yes for the parallel version
 # set debug = yes to debug
 DEBUG ?= no
+PROFILE ?= no
 # end user configuration;
 #***************************************************************************
 
@@ -11,18 +12,22 @@ DEBUG ?= no
 CC = g++
 
 ifeq ($(strip $(DEBUG)), yes)
-    CFLAGS += -ggdb -DDEBUG -D THPOOL_DEBUG
+    CFLAGS += -ggdb -DDEBUG -D THPOOL_DEBUG 
 else
     CFLAGS += -O3
 endif
 
+ifeq ($(strip $(PROFILE)), yes)
+    PFLAGS += -g -pg -O0 
+endif
+    
 CFLAGS += -Wall -m64 -fno-math-errno  -ffast-math
 
 HTSINC?=/usr/local/include/htslib
 HTSLIB?=/usr/local/lib
 CFLAGS +=-I$(HTSINC) -g
 #LDFLAGS =-L$(HTSLIB)  -lm -lhts # -lz -llzma -lbz2
-LDFLAGS = -lm -lhts # -lz -llzma -lbz2
+LDFLAGS = -lm -lhts -lz -llzma -lbz2
 #LDFLAGS += /usr/local/lib/libhts.a
 #LDFLAGS += /usr/local/lib/libgsl.a /usr/local/lib/libgslcblas.a
 LDFLAGS += -lpthread 
@@ -31,11 +36,11 @@ OBJS = kindred.o lsfit.o thpool.o
 
 all:	kindred 
 
-.cpp.o : ;  $(CC) $(CFLAGS) -c $<
+.cpp.o : ;  $(CC) $(CFLAGS) $(PFLAGS) -c $<
 
 $(OBJS): %.o: %.cpp
 
-kindred: kindred.o lsfit.o thpool.o; $(CC) $(OBJS) $(LDFLAGS) -o kindred
+kindred: kindred.o lsfit.o thpool.o; $(CC) $(OBJS) $(LDFLAGS) $(PFLAGS) -o kindred
 #test: test_vcf.o;  $(CC) test_vcf.o $(LDFLAGS) -o test
 #kde: test_kde.o kde.o;  $(CC) test_kde.o kde.o $(LDFLAGS) -o kde  
 #trd: test_thread.o;  $(CC) test_thread.o $(LDFLAGS) -o tmt  
