@@ -2,8 +2,9 @@
 
 Kindred is designed to infer kinship $\phi$ between a pair of samples accounting for inbreeding of the samples. This is done through modelling nine latent Jacquard IBD states. If the pair is one and itself, the kinship is $\phi = (1+F)/2$ where $F$ denotes inbreeding coefficient. 
 
-## Current version 0.8 10 Feb 2023
+## Current version
 
+Verion 0.8 was released on 10 Feb 2023. 
 Untar kindred.linux.tar to get an linux executable. 
 You may also compile from the source code in src/. 
 
@@ -37,6 +38,9 @@ With -k option, Kindred can output an additional file pref.kin.gz.  The first li
 
 ID1 and ID2 are two sample IDs, phi is the kinship, d1, ..., d9 are probabilities of Jacquard latent states, and sumd is the sum of the nine probabilities, should be close to $1$. Significant departure from $1$ suggest ill fit, usually caused by misspecification of allele frequencies.  
   
+## UKin implementation
+
+To compare Kindred with UKin (https://github.com/zxy22320/UKin), we reimplemented it with multithreading in c and this can be invoked by -u. It will take the same input vcf file as Kindred and output a kinship estimates (a square matrix as in pref.rkm.gz) in a file named pref.ukinGRM.gz.   
 
 ## Usage examples
 
