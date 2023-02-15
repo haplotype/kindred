@@ -136,4 +136,7 @@ You will have in.vcf.gz (instead of in.vcf) and in.vcf.gz.tbi.
        touch chr_name_conv.txt; for i in $(seq 1 22); do echo chr$i $i >> chr_name_conv.txt; done
        bcftools annotate --rename-chrs chr_name_conv.txt input.chr22.vcf.gz | bgzip > output.22.vcf.gz
        
+6) Set SNP ID. 
+ 
+       bcftools annotate --set-id '%CHROM\_%POS\_%REF\_%ALT'  in.vcf.gz
        
