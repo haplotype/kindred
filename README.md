@@ -4,9 +4,8 @@ Kindred is designed to infer kinship $\phi$ between a pair of samples accounting
 
 ## Current version
 
-Verion 0.8 was released on 10 Feb 2023. 
-Untar kindred.linux.tar to get an linux executable. 
-You may also compile from the source code in src/. 
+Verion 0.8 was released on 10 Feb 2023. Exectuables for Linux and Mac can be found here: http://www.haplotype.org/software.html.  
+You may also choose to compile from the source code in src/. 
 
 ## Input and options
 Kindred takes vcf file or stream as input with mandatory -i option. The vcf file must contain "INFO/AF" tag and biallelic genotypes. If the AF tag is not readily available, it can be populated by bcftools on the fly. 
