@@ -4,7 +4,7 @@ Kindred is designed to infer kinship $\phi$ between a pair of samples accounting
 
 ## Current version
 
-Verion 0.8 was released on 10 Feb 2023. Exectuables for Linux and Mac can be found here: http://www.haplotype.org/software.html.  
+Verion 0.81 was released on 13 March 2023. Exectuables for Linux and Mac can be found here: http://www.haplotype.org/software.html.  
 You may also choose to compile from the source code in src/. 
 
 ## Input and options
