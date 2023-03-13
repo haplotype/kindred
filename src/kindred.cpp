@@ -39,18 +39,19 @@
 #include <map> 
 #include <math.h>
 #include "lsfit.h"
-//#include "gsl/gsl_linalg.h"
 #include <pthread.h>
 #include <stdint.h>
 #include <zlib.h>
 #include "thpool.h"
 
+#include "gsl/gsl_linalg.h"
 
 using namespace std; 
 
-#define VERSION "0.8"
+#define VERSION "0.81"
 //18 Jan 2023   version 0.7
 //01 Feb 2023   version 0.8
+//03 Mar 2023   version 0.81
 typedef struct KData {
     double * grm; 
     double ** kin;   //kinship 
@@ -62,9 +63,13 @@ typedef struct KData {
     int ns;      //number of snps. 
     int nth;     //number of threads
     int yesk;    //toggle off write kin. 
-//    int * beg; int * end; 
+    int gsl;     //use gsl fit if gsl == 1; 
+    int * beg; 
+    int * end; 
     int * ileft; 
     int * iright; 
+//    double se; 
+    int bychr; 
 } KData; 
 
 KData gdadu; 
@@ -82,10 +87,12 @@ TData guru;
 //the additional data structure is for ukin threads. 
 
 //global data for multithreading. 
+void jacquard_bychr(void *par);  
 void jacquard(void *par);  
 void jacquard3(void *par);  
 int make_grm(string fn, string pref, int); 
 void perSNP_scGRM(void *par); 
+void gsl_solve(double ** AtA, double * AtB, double * x, int np);
 
 double ** Allocate2DMatrix(int dim1, int dim2)
 {
@@ -145,6 +152,26 @@ void Free2DByteMatrix(uint8_t ** m)
 
 void gdm(double p, double * mm) 
 {
+//    double q = 1 - p; 
+//    double p2 = p * p; 
+//    double q2 = q * q; 
+//    double pq = p * q; 
+//    double p3 = p2 * p; 
+//    double q3 = q2 * q; 
+//    double p2q = p2 * q; 
+//    double pq2 = p * q2; 
+//
+//
+//    double tt[9][9] = { {p, p2, p2, p3, p2, p3, p2, p3, p3*p}, 
+//	  {0, 0,  pq, 2*p2q, 0, 0, 0, p2q, 2*p2*pq},
+//	  {0, pq, 0, pq2, 0, p2q, 0, 0, pq*pq}, 
+//	  {0, 0, 0, 0, pq, 2*p2q, 0, p2q, 2*p2*pq}, 
+//	  {0, 0, 0, 0, 0, 0, 2*pq, pq, 4*pq*pq}, 
+//	  {0, 0, 0, 0, pq, 2*pq2, 0, pq2, 2*q2*pq},
+//	  {0, pq, 0, p2q, 0, pq2, 0, 0, pq*pq}, 
+//	  {0, 0, pq, 2*pq2, 0, 0, 0, pq2, 2*q2*pq}, 
+//	  {q, q2, q2, q3, q2, q3, q2, q3, q3*q} }; 
+
     double q = 1 - p; 
     double p2 = p * p; 
     double q2 = q * q; 
@@ -153,17 +180,86 @@ void gdm(double p, double * mm)
     double q3 = q2 * q; 
     double p2q = p2 * q; 
     double pq2 = p * q2; 
+    double p4 = p3*p;
+    double p3q = p2*pq;
+    double p2q2 = pq*pq;
+    double pq3 = pq*q2;
+    double q4 = q3*q;
 
 
-    double tt[9][9] = { {p, p2, p2, p3, p2, p3, p2, p3, p3*p}, 
-	  {0, 0,  pq, 2*p2q, 0, 0, 0, p2q, 2*p2*pq},
-	  {0, pq, 0, pq2, 0, p2q, 0, 0, pq*pq}, 
-	  {0, 0, 0, 0, pq, 2*p2q, 0, p2q, 2*p2*pq}, 
-	  {0, 0, 0, 0, 0, 0, 2*pq, pq, 4*pq*pq}, 
-	  {0, 0, 0, 0, pq, 2*pq2, 0, pq2, 2*q2*pq},
-	  {0, pq, 0, p2q, 0, pq2, 0, 0, pq*pq}, 
-	  {0, 0, pq, 2*pq2, 0, 0, 0, pq2, 2*q2*pq}, 
-	  {q, q2, q2, q3, q2, q3, q2, q3, q3*q} }; 
+    double tt[9][9] = { {p, p2, p2, p3, p2, p3, p2, p3, p4}, 
+	  {0, 0,  pq, 2*p2q, 0, 0, 0, p2q, 2*p3q},
+	  {0, pq, 0, pq2, 0, p2q, 0, 0, p2q2}, 
+	  {0, 0, 0, 0, pq, 2*p2q, 0, p2q, 2*p3q}, 
+	  {0, 0, 0, 0, 0, 0, 2*pq, pq, 4*p2q2}, 
+	  {0, 0, 0, 0, pq, 2*pq2, 0, pq2, 2*pq3},
+	  {0, pq, 0, p2q, 0, pq2, 0, 0, p2q2}, 
+	  {0, 0, pq, 2*pq2, 0, 0, 0, pq2, 2*pq3}, 
+	  {q, q2, q2, q3, q2, q3, q2, q3, q4} }; 
+
+    for (int i = 0, k=0; i < 9; i++)
+	for (int j = 0; j < 9; j++,k++)
+	    mm[k] = tt[i][j]; 
+}
+
+void igdm(double a, double b, double * mm) //assume p is uniform on (a,b)
+{
+//    double q = 1 - p; 
+//    double p2 = p * p; 
+//    double q2 = q * q; 
+//    double pq = p * q; 
+//    double p3 = p2 * p; 
+//    double q3 = q2 * q; 
+//    double p2q = p2 * q; 
+//    double pq2 = p * q2; 
+//    double p4 = p3*p;
+//    double p3q = p2*pq;
+//    double p2q2 = pq*pq;
+//    double pq3 = pq*q2;
+//    double q4 = q3*q;
+
+    double a2 = a*a; 
+    double a3 = a2*a;
+    double b2 = b*b; 
+    double b3 = b2*b; 
+    double i1 = (b-a); 
+    double ip = (b2-a2)/2;
+    double iq = i1 - ip; 
+    double ip2 = (b3-a3)/3; 	    
+    double iq2 = i1 - 2* ip + ip2;  
+    double ipq = ip2 - ip;          
+    double ip3 = (b3*b - a3*a)/4;   
+    double iq3 = i1 - 3*ip + 3*ip2 - ip3;     
+    double ip2q = ip2 - ip3;   
+    double ipq2 = ip -2*ip2 + ip3;
+    double ip4 = (b3*b2 - a3*a2)/5;    
+    double ip3q = ip3 - ip4; 
+    double ip2q2 = ip2 - 2*ip3 + ip4; 
+    double ipq3 = ip-3*ip2+3*ip3-ip4;    
+    double iq4 = i1-4*ip + 6*ip2 - 4*ip4 + ip4;   
+    ip /=i1;
+    iq /=i1;
+    ip2 /=i1;     
+    iq2 /=i1;
+    ipq /=i1;
+    ip3 /= i1; 
+    iq3 /= i1; 
+    ip2q /=i1;
+    ipq2 /=i1;
+    ip4 /= i1;
+    ip3q /= i1; 
+    ip2q2 /= i1;
+    ipq3 /= i1;
+    iq4 /= i1; 
+    double tt[9][9] = { {ip, ip2, ip2, ip3, ip2, ip3, ip2, ip3, ip4}, 
+	  {0, 0,  ipq, 2*ip2q, 0, 0, 0, ip2q, 2*ip3q},
+	  {0, ipq, 0, ipq2, 0, ip2q, 0, 0, ip2q2}, 
+	  {0, 0, 0, 0, ipq, 2*ip2q, 0, ip2q, 2*ip3q}, 
+	  {0, 0, 0, 0, 0, 0, 2*ipq, ipq, 4*ip2q2}, 
+	  {0, 0, 0, 0, ipq, 2*ipq2, 0, ipq2, 2*ipq3},
+	  {0, ipq, 0, ip2q, 0, ipq2, 0, 0, ip2q2}, 
+	  {0, 0, ipq, 2*ipq2, 0, 0, 0, ipq2, 2*ipq3}, 
+	  {iq, iq2, iq2, iq3, iq2, iq3, iq2, iq3, iq4} }; 
 
     for (int i = 0, k=0; i < 9; i++)
 	for (int j = 0; j < 9; j++,k++)
@@ -202,26 +298,26 @@ void print_progress_bar(int last, long p, long total)
 
 int usage()
 {
-	fprintf(stderr, "\n");
-	fprintf(stderr, "Kindred (infer realized kinship and inbreeding coefficients)\n");
-	fprintf(stderr, "Version: %s\n", VERSION);
-	fprintf(stderr, "Usage:   kindred -i in.vcf.gz [-adfgjkotu]\n");
-	fprintf(stderr, "Options: \n");
-	fprintf(stderr, "         -a str        INFO tag for allele frequency [AF]\n");
-//	fprintf(stderr, "         -b int        number of allele freq bins (max 128) [100]\n");
-	fprintf(stderr, "         -d int        thin marker by a min neighor distance [1] \n");
-//	fprintf(stderr, "         -e int        effective n for AF estimates [100]\n");    
-	fprintf(stderr, "         -f flt        minor allele freq threshold [0.01]\n");    
-	fprintf(stderr, "         -g str        convert square rkm to binary gcta format\n");
-	fprintf(stderr, "         -i str        (indexed) bgzipped vcf file\n");
-	fprintf(stderr, "         -j num        number of Jacquard states (3 or 9) [9]\n");
-	fprintf(stderr, "         -k            toggle on writing .kin file [off]\n");
-//	fprintf(stderr, "         -n str        numeric genotype input file \n");
-	fprintf(stderr, "         -o str        output prefix [out]\n");
-	fprintf(stderr, "         -t int        number of thread [8]\n");
-	fprintf(stderr, "         -u            UKin \n\n");
-	fprintf(stderr, "User Manual can be found at github.com/haplotype/kindred\n");
-	fprintf(stderr, "Bug report: Yongtao Guan <ytguan@gmail.com>\n\n");
+	fprintf(stdout, "\n");
+	fprintf(stdout, "Kindred (infer realized kinship and inbreeding coefficients)\n");
+	fprintf(stdout, "Version: %s\n", VERSION);
+	fprintf(stdout, "Usage:   kindred -i in.vcf.gz [-adfgjkotu]\n");
+	fprintf(stdout, "Options: \n");
+	fprintf(stdout, "         -a str        INFO tag for allele frequency [AF]\n");
+//	fprintf(stdout, "         -b int        number of allele freq bins (max 128) [100]\n");
+	fprintf(stdout, "         -d int        thin marker by a min neighor distance [1] \n");
+//	fprintf(stdout, "         -e int        effective n for AF estimates [100]\n");    
+	fprintf(stdout, "         -f flt        minor allele freq threshold [0.01]\n");    
+	fprintf(stdout, "         -g str        convert square rkm to binary gcta format\n");
+	fprintf(stdout, "         -i str        (indexed) bgzipped vcf file\n");
+	fprintf(stdout, "         -j num        number of Jacquard states (3 or 9) [9]\n");
+	fprintf(stdout, "         -k            toggle on writing .kin file [off]\n");
+//	fprintf(stdout, "         -n str        numeric genotype input file \n");
+	fprintf(stdout, "         -o str        output prefix [out]\n");
+	fprintf(stdout, "         -t int        number of thread [8]\n");
+	fprintf(stdout, "         -u            UKin \n\n");
+	fprintf(stdout, "User Manual can be found at github.com/haplotype/kindred\n");
+	fprintf(stdout, "Bug report: Yongtao Guan <ytguan@gmail.com>\n\n");
 	return 1;
 }
 
@@ -230,42 +326,43 @@ int main(int argc, char *argv[])
 {
     time_t time0, time1, time2; 
     string fn_vcf; 
-//	string fn_af; 
-//	string fn_gt; 
     string pref("out");
     string af_tag("AF"); 
     char c;
-    int vcf_flag = 0; 
-    string fn_grm; 
-    int gcta_flag = 0; 
-    string fn_gt; 
-    int num_gt_flag = 0; //input is 012 ns x ni matrix; 
-    int flag_scGRM = 0; 
-    int snp_dist = 0; 
+    int flag_vcf = 0; 
+    int flag_gcta = 0; 
+    int flag_scGRM = 0;    //flag_ukin; 
     int flag_help = 0;
+    int flag_gt012 = 0; //input is 012 ns x ni matrix; 
 
-//    int lskip = 0; 
-    gdadu.nb = 200; //number of frequency bins; 
-    gdadu.nth = 8; 
-    gdadu.yesk = 0; 
-    int jstates = 9; 
-//    gdadu.t1 = 0; 
-//    gdadu.t2 = 0; 
-//    gdadu.t3 = 0; 
-    int nb=gdadu.nb; 
+    string fn_grm; 
+    string fn_gt; 
+    int snp_dist = 0; 
+
+    //optimized values, do not change; 
+    int m_nb = 100;   
+    double m_se = 0.04;   
     double m_maf = 0.01; 
-    double m_se = 0.04; 
+
+    int m_nth = 8; 
+    int m_jstates = 9; //3 or 9
+    int m_bychr = 0; // 0 or 1 or 2; 
+    int m_yesk = 0;  // 0 or 1; 
+    int m_gsl = 0;   // 0 or 1;
 
 
-    while ((c = getopt(argc, argv, "a:b:d:e:f:g:hi:j:kn:o:t:u")) >= 0) 
+
+    while ((c = getopt(argc, argv, "a:b:c:d:e:f:g:hi:j:kn:o:t:uy")) >= 0) 
     {
 	switch (c) {
 	    case 'a': 
 		af_tag.assign(optarg); 
 		break; 
 	    case 'b': 
-		nb = atoi(optarg); 
-		gdadu.nb = nb; 
+		m_nb = atoi(optarg); 
+		break;
+	    case 'c': 
+		m_bychr = atoi(optarg); 
 		break;
 	    case 'd': 
 		snp_dist = atoi(optarg); 
@@ -277,34 +374,37 @@ int main(int argc, char *argv[])
 		m_maf = atof(optarg); 
 		break;
 	    case 'g': 
-		gcta_flag = 1; 
+		flag_gcta = 1; 
 		fn_grm.assign(optarg); 
 		break;
 	    case 'h': 
 		flag_help = 1; 
 		break; 
 	    case 'i': 
-		vcf_flag = 1; 
+		flag_vcf = 1; 
 		fn_vcf.assign(optarg); 
 		break;
 	    case 'j': 
-		jstates = atoi(optarg); 
+		m_jstates = atoi(optarg); 
 		break;
 	    case 'k': 
-		gdadu.yesk = 1 - gdadu.yesk; 
+		m_yesk = 1 - m_yesk; 
 		break;
 	    case 'n': 
-		num_gt_flag = 1; 
+		flag_gt012 = 1; 
 		fn_gt.assign(optarg); 
 		break;
 	    case 'o': 
 		pref.assign(optarg); 
 		break;
 	    case 't': 
-		gdadu.nth = atoi(optarg); 
+		m_nth = atoi(optarg); 
 		break;
 	    case 'u': 
 		flag_scGRM = 1; 
+		break;
+	    case 'y': 
+		m_gsl = 1; 
 		break;
 	    default: 
 		break; 
@@ -315,19 +415,23 @@ int main(int argc, char *argv[])
 //    if(argc > optind) 
 //	fn_vcf.assign(argv[argc-1]); 
     //this seems not working with mac version of getopt. 
-    if(gcta_flag == 1) return make_grm(fn_grm, pref, 0); 
-    if ((vcf_flag == 0 && num_gt_flag == 0) || flag_help == 1) return usage();
-    fprintf(stdout, "\nKindred 0.8 by Yongtao Guan @ Framingham Heart Study, NHLBI (C) 2023 \n"); 
-    if(!(jstates == 3 || jstates ==9)) 
+    if(flag_gcta == 1) return make_grm(fn_grm, pref, 0); 
+    if ((flag_vcf == 0 && flag_gt012 == 0) || flag_help == 1) return usage();
+    fprintf(stdout, "\n"); 
+    fprintf(stdout, "Kindred %s by Yongtao Guan at Framingham Heart Study \n", VERSION); 
+    fprintf(stdout, "  National Heart, Lung, and Blood Institute (C) 2023 \n"); 
+    if(!(m_jstates == 3 || m_jstates ==9)) 
     {
 	fprintf(stdout, "number of latent states has to be eitehr 9 or 3\n"); 
 	return usage(); 
     }
 
-//    int a1 = 1220531; 
-//    int a2 = 1800; 
-//    long cc = (long) a1 * a2; 
-//    cout << a1 << " x " << a2 << " = " << cc << endl; 
+    gdadu.nb = m_nb;  
+    gdadu.nth = m_nth; 
+    gdadu.yesk = m_yesk; 
+    gdadu.gsl = m_gsl; 
+    gdadu.bychr = m_bychr; 
+
 
     gzFile fp1 = NULL;
     gzFile fp2 = NULL;
@@ -344,36 +448,45 @@ int main(int argc, char *argv[])
     for (int i = 0; i < argc; i++)
 	fprintf(fplog, "%s ", argv[i]); 
     fprintf(fplog, "\n"); 
+    fprintf(fplog, "##m_nb = %d \n", m_nb); 
+    fprintf(fplog, "##m_se = %0.3f \n", m_se); 
+    fprintf(fplog, "##m_maf = %0.3f \n", m_maf); 
+    fprintf(fplog, "##m_nth = %d \n", m_nth); 
+    fprintf(fplog, "##m_jstates = %d \n", m_jstates); 
+    fprintf(fplog, "##m_bychr = %d \n", m_bychr); 
+    fprintf(fplog, "##m_yesk = %d \n", m_yesk); 
+    fprintf(fplog, "##m_gsl = %d \n", m_gsl); 
 
     time0 = time(NULL); 
 //    vector<float> vaf; 
 //    vector<uint8_t> v8; 
     //open vcf file; 
 
-//    if(gdadu.nb < 1000) gdadu.nb = 1000; 
-    gdadu.ileft = new int[nb]; 
-    gdadu.iright = new int[nb]; 
-    for (int i = 1; i < nb; i++)
+    gdadu.ileft = new int[m_nb]; 
+    gdadu.iright = new int[m_nb]; 
+    for (int i = 0; i < m_nb; i++)
     {
 //	double p = double(i)/nb;      
 //	double d = 1.96 * sqrt(p * (1-p) / ne); 
 //	int wind =  floor(d * nb); 
-	int wind = floor(m_se * nb); 
+	int wind = floor(m_se * m_nb); 
 	int left = i - wind;
 	if(left < 0) left = 0; 
 	int right = i + wind;
-	if(right > (nb-1)) right = (nb-1); 
+	if(right > (m_nb-1)) right = m_nb-1; 
 	gdadu.ileft[i] = left;  
         gdadu.iright[i] = right; 
     }   //this defines intervals to count freq. and the center is just p = 0.02 ... 0.98. 
-//    for (int i = nb/10; i < nb; i+=nb/10)
+//    for (int i = 0; i < m_nb; i+=m_nb/10)
 //	fprintf(stdout, "%d < %d > %d \n", gdadu.ileft[i], i, gdadu.iright[i]);
 
     int snps_by_chr[22]; 
+    gdadu.beg = new int[22]; 
+    gdadu.end = new int[22]; 
     for (int i = 0; i < 22; i++)
-	snps_by_chr[i] = 0; 
+	gdadu.beg[i] = gdadu.end[i] = snps_by_chr[i] = 0; 
     int ns1 = 0; 
-    if(vcf_flag == 1) 
+    if(flag_vcf == 1) 
     {
 	htsFile *fpv = hts_open(fn_vcf.c_str(), "r");   
 	bcf_hdr_t *hdr = bcf_hdr_read(fpv);  
@@ -469,7 +582,16 @@ int main(int argc, char *argv[])
        }
     }
 
-    if(num_gt_flag == 1)  //this is to read in genotype 012 matrix for debugging. 
+    gdadu.beg[0] = 0; 
+    gdadu.end[0] = snps_by_chr[0]; 
+    for (int i = 1; i < 22; i++) 
+    {
+	gdadu.end[i] = gdadu.end[i-1] + snps_by_chr[i]; 
+	gdadu.beg[i] = gdadu.end[i-1]; 
+    }
+    //end is a cumulative sum of snp_by_chr; 
+
+    if(flag_gt012 == 1)  //this is to read in genotype 012 matrix for debugging. 
     {
 	ifstream fin; // indata is like cin
 	float num; 
@@ -616,7 +738,7 @@ int main(int argc, char *argv[])
    gdadu.raf = new uint16_t[gdadu.ns]; //rounded allele frequency. 
    for (int m = 0; m < gdadu.ns; m++)
    {
-       gdadu.raf[m] = floor(gdadu.nb * guru.vaf.at(m)); 
+       gdadu.raf[m] = floor(gdadu.nb * guru.vaf.at(m));  
        if(gdadu.raf[m] == gdadu.nb) 
 	   gdadu.raf[m] = gdadu.nb-1; 
    }
@@ -650,7 +772,7 @@ int main(int argc, char *argv[])
 
     gdadu.grm = new double[gdadu.ni*(gdadu.ni+1)/2];
     if(gdadu.yesk == 1) 
-    	gdadu.kin = Allocate2DMatrix(gdadu.nth*1000,jstates+2); 
+    	gdadu.kin = Allocate2DMatrix(gdadu.nth*1000,m_jstates+2); 
     else 
 	gdadu.kin = NULL; 
 
@@ -705,9 +827,11 @@ int main(int argc, char *argv[])
     for (int ii = 0; ii < gdadu.ni; ii++)
        for (int jj = ii; jj < gdadu.ni; jj++)
        {
-	   if(jstates == 3) 
+	   if(gdadu.bychr > 0) 
+	   	thpool_add_work(thpool, jacquard_bychr, (void*)tiktok);
+	   else if(m_jstates == 3) 
 	   	thpool_add_work(thpool, jacquard3, (void*)tiktok);
-	   else //if(jstates == 9) 
+	   else //if(m_jstates == 9) 
 	   	thpool_add_work(thpool, jacquard, (void*)tiktok);
 	   load++; 
 	   tiktok++; 
@@ -726,8 +850,8 @@ int main(int argc, char *argv[])
 //			    fprintf(fp1, "%s %s ", hdr->samples[i1], hdr->samples[i2]); 
 //		       else 
 			    gzprintf(fp1, "%d %d ", i1+1, i2+1);  //using integer is R friendly; sample ID can be obtain by bcftools. 
-		       for (int c = 0; c < jstates+2; c++)
-			   gzprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
+		       for (int c = 0; c < m_jstates+2; c++)
+			   gzprintf(fp1, "%.6f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
 		       gzprintf(fp1, "\n"); 
 		   }
 	       }
@@ -753,8 +877,8 @@ int main(int argc, char *argv[])
 //		fprintf(fp1, "%s %s ", hdr->samples[i1], hdr->samples[i2]); 
 //	   else 
 		gzprintf(fp1, "%d %d ", i1+1, i2+1); 
-	   for (int c = 0; c < jstates+2; c++)
-	       gzprintf(fp1, "%6.5f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
+	   for (int c = 0; c < m_jstates+2; c++)
+	       gzprintf(fp1, "%.6f ", gdadu.kin[i%(gdadu.nth*1000)][c]); 
 	   gzprintf(fp1, "\n"); 
        }
        gzclose(fp1); 
@@ -772,7 +896,10 @@ int main(int argc, char *argv[])
 	   if(ii > jj)  idx = sq2tr[(long) jj*gdadu.ni+ii]; 
 	   else idx = sq2tr[(long) ii*gdadu.ni+jj]; 
 //	   fprintf(fp2, "%8.6f ", gdadu.grm[idx]); 
-	   gzprintf(fp2, "%8.6f ", gdadu.grm[idx]); 
+//	   if(gdadu.grm[idx] < 1e-6) 
+//	        gzprintf(fp2, "0 "); 
+//	   else 
+	   	gzprintf(fp2, "%.6f ", gdadu.grm[idx]); 
        }
        gzprintf(fp2, "\n"); 
     }
@@ -865,10 +992,10 @@ void jacquard(void *par)
     int ii = kk / ni; 
     int jj = kk % ni; 
    
+//   double * m3 = new double[81]; 
    double * m1 = new double[81]; 
-   double ** sigma = Allocate2DMatrix(nb*10, 9); 
-   double * theta = new double[nb*10]; 
-//   double ** sts = Allocate2DMatrix(100, 81); 
+   double ** sigma = Allocate2DMatrix(9, 9); 
+   double * theta = new double[10]; 
    double ** count9 = Allocate2DMatrix(nb,10); 
 
    int np = 9; 
@@ -906,11 +1033,11 @@ void jacquard(void *par)
        //11 is missing
 
        uint16_t tn = gdadu.raf[m]; 
-       if(tn>nb/2) { 
-	   tn = nb-tn; 
-	   gi = 2 - gi; 
-	   gj = 2 - gj; 
-       }
+//       if(tn>nb) { 
+//	   tn = nb+nb-tn; 
+//	   gi = 2 - gi; 
+//	   gj = 2 - gj; 
+//       }
        uint8_t cc = ((gi << 2) | gj) - gi; 
        // 00 00    0  -0
        // 00 01    1  -0
@@ -927,7 +1054,7 @@ void jacquard(void *par)
    }
            
    double notwin = 0; 
-   for (int n = 0; n < nb/2; n++) 
+   for (int n = 0; n < nb; n++) 
    {
 //       int set[] = {1,2,3,5,6,7};
        for(int j = 0; j < 3; j++)
@@ -937,51 +1064,71 @@ void jacquard(void *par)
    //if the count notwin === 0, then it's twin or self. 
 //   clock_t clk1 = clock(); 
 //	   build_matrix; 
-
-   for (int n = 1; n < nb/2; n++)
-   {
-       for (int j = 0; j < 10; j++)
-       {
-	   theta[n*10+j] = 0; 
-	   for (int k = gdadu.ileft[n]; k <= gdadu.iright[n]; k++)
-	       theta[n*10+j] += count9[k][j]; 
-       }
-       double af = 0; 
-       double cc[9] = {4,3,2,3,2,1,2,1,0}; 
-       if(theta[n*10+9] > 0) {
-	   for (int j = 0; j < 9; j++)
-	       af += theta[n*10+j] * cc[j]; 
-	   af /= theta[n*10+9]; 
-	   af /= 4; 
-       }
-       gdm(af, m1); 
-//       cout << af << " || " << (n+0.00001)/nb << endl; 
-
-       for (int i = 0; i < 9; i ++)
-	   for (int j = 0; j < 9; j++)
-	       sigma[n*10+i][j] = m1[i*9+j] * theta[n*10+9]; 
-       for (int j = 0; j < 9; j++)
-	   sigma[n*10+9][j] = theta[n*10+9]; 
-   }
+//   if(ii == 0 && jj == 1) 
+//   {
+//       for (int n = 0; n < nb; n++)
+//       {
+//	   for (int j = 0; j < 10; j++)
+//	       cout << count9[n][j] << " \t"; 
+//	   cout << endl; 
+//       }
+//   }
 
    for (int i = 0; i < 9; i++)
        for (int j = 0; j < 9; j++)
-       {
 	   AtA[i][j] = 0; 
-	   for (int n = 1; n < nb/2; n++) 
-	       for (int k = 0; k < 10; k++)
-	       	   AtA[i][j] += sigma[n*10+k][i] * sigma[n*10+k][j]; // *wt[i] * wt[j]; 
-       }
    for (int j = 0; j < 9; j++)
-   {
        AtB[j] = 0; 
-       for (int n = 1; n < nb/2; n++) 
-	   for (int k = 0; k < 10; k++)
-	   	AtB[j] += sigma[n*10+k][j] * theta[n*10+k]; 
+
+   for (int n = 0; n < nb; n++)
+   {
+       for (int j = 0; j < 10; j++)
+       {
+	   theta[j] = 0; 
+	   for (int k = gdadu.ileft[n]; k <= gdadu.iright[n]; k++)
+	       theta[j] += count9[k][j]; 
+       }
+       double af = 0; 
+       double cc[9] = {4,3,2,3,2,1,2,1,0}; 
+       if(theta[9] > 0) {
+	   for (int j = 0; j < 8; j++)
+	       af += theta[j] * cc[j]; 
+	   af /= theta[9]; 
+	   af /= 4; 
+       }
+       gdm(af, m1); 
+       //use SNPs in a bin to re-compute allele frequency. 
+       //this makes it robust to allele freq. mis-specification. 
+
+       for (int i = 0; i < 9; i ++)
+	   for (int j = 0; j < 9; j++)
+	   {
+	       sigma[i][j] = 0; 
+	       for (int k = 0; k < 9; k++)
+	       	   sigma[i][j] += m1[k*9+i] * m1[k*9+j]; 
+	       AtA[i][j] += sigma[i][j] * theta[9]; 
+	   }
+
+       for (int j = 0; j < 9; j++)
+	   for (int k = 0; k < 9; k++)
+	   	AtB[j] += m1[k*9+j] * theta[k]; 
    }
 
-   if(nnls(AtA, np, np, AtB, x, &r2, w, zz, index) != 0) 
-       cout << "nnls used more than 200 iterations to converge" << endl; 
+//   if(ii == 1 && jj == 2) 
+//   {
+//       for (int n = 0; n < nb; n++)
+//       {
+//	   for (int j = 0; j < 10; j++)
+//	       cout << theta[n*10+j] << " \t"; 
+//	   cout << endl; 
+//       }
+//   }
+
+   if(gdadu.gsl == 1) 
+       gsl_solve(AtA, AtB, x, np); 
+   else 
+       nnls(AtA, np, np, AtB, x, &r2, w, zz, index);  
+//       cout << "nnls used more than 200 iterations to converge" << endl; 
    double sumx = 0; 
    for (int i = 0; i < 9; i++)
        sumx += x[i]; 
@@ -1018,6 +1165,208 @@ void jacquard(void *par)
    Free2DMatrix(sigma); 
    delete[] theta; 
    Free2DMatrix(count9); 
+}
+
+void jacquard_bychr(void *par) 
+{
+    int nb = gdadu.nb; 
+    int ns = gdadu.ns; 
+    int ni = gdadu.ni; 
+
+    long tiktok = (long) par; 
+    long kk = tr2sq[tiktok]; 
+    int ii = kk / ni; 
+    int jj = kk % ni; 
+   
+   double * m1 = new double[81]; 
+   double ** sigma = Allocate2DMatrix(9, 9); 
+   double * theta = new double[10]; 
+   double ** count9 = Allocate2DMatrix(nb,10); 
+   //each allele frequency bin has 9 counts of different joint genotypes. 
+   //each allele frequency bin has 1 count of number of SNPs. 
+   double ** count9_all = Allocate2DMatrix(nb, 10); 
+   for (int i = 0; i < nb; i++) 
+       for (int j = 0; j < 10; j++) 
+       	   count9_all[i][j] = 0; 
+
+   int np = 9; 
+   double ** AtA = Allocate2DMatrix(9,9); 
+   double * AtB = new double[9]; 
+   double w[9];
+   double zz[9];
+   int index[9]; 
+   double r2; 
+   double x[9]; 
+
+//   clock_t clk0 = clock(); 
+//	   count; 
+   unsigned long ki = (long) (ns) * ii; 
+   unsigned long kj = (long) (ns) * jj; 
+   unsigned long qi = ki / 16;   
+   uint8_t ri = ki % 16; 
+   unsigned long qj = kj / 16; 
+   uint8_t rj = kj % 16; 
+   double total_phi = 0; 
+   double total_weight = 0; 
+   for (int chr = 0; chr < 22; chr++)
+   {
+       int beg = gdadu.beg[chr];
+       int end = gdadu.end[chr]; 
+       double weight = (double) (end-beg)/1000; 
+       for (int n = 0; n < nb; n++) 
+	   for (int j = 0; j < 10; j++) 
+	       count9[n][j] = 0; 
+
+       for (int m = beg; m < end; m++)
+       {
+    //       uint8_t gi = (gdadu.gt[ki/4] >> ((ki%4)*2)) & 3; 
+    //       uint8_t gj = (gdadu.gt[kj/4] >> ((kj%4)*2)) & 3; 
+	   uint8_t gi = (gdadu.gt[qi] >> ((ri)*2)) & 3; 
+	   uint8_t gj = (gdadu.gt[qj] >> ((rj)*2)) & 3; 
+	   ri++; if((ri& 0xF) == 0) {ri &= ~0xFF; qi++;} 
+	   rj++; if((rj& 0xF) == 0) {rj &= ~0xFF; qj++;} 
+
+	   if((gi^3) == 0 || (gj^3) == 0) continue;     
+	   //11 is missing
+	   uint8_t cc = ((gi << 2) | gj) - gi; 
+	   // 00 00    0  -0
+	   // 00 01    1  -0
+	   // 00 10    2  -0
+	   // 01 00    4  -1
+	   // 01 01    5  -1
+	   // 01 10    6  -1
+	   // 10 00    8  -2
+	   // 10 01    9  -2
+	   // 10 10    10 -2
+
+	   int tn = (int) gdadu.raf[m]; 
+	   count9[tn][8-cc]++;  
+	   count9[tn][9]++;  
+       }
+       for (int i = 0; i < nb; i++)
+	   for (int j = 0; j < 10; j++)
+	   count9_all[i][j] += count9[i][j]; 
+	       
+//       int notwin = 0; 
+//       for (int n = 0; n < nb; n++) 
+//       {
+//	   int set[] = {1,2,3,5,6,7};
+//	   for(int j = 0; j < 6; j++)
+//	       notwin += count9[n*10 + set[j]]; 
+//       }
+       //count genoytpes that are not AA AA, AB AB and BB BB. 
+       //if the count notwin === 0, then it's twin or self. 
+
+       for (int i = 0; i < 9; i++)
+	   for (int j = 0; j < 9; j++)
+	       AtA[i][j] = 0; 
+       for (int j = 0; j < 9; j++)
+	   AtB[j] = 0; 
+
+       for (int n = 0; n < nb; n++)
+       {
+	   for (int j = 0; j < 10; j++)
+	   {
+	       theta[j] = 0; 
+	       for (int k = gdadu.ileft[n]; k <= gdadu.iright[n]; k++)
+		   theta[j] += count9[k][j]; 
+	   }
+	   double af = 0; 
+	   double cc[9] = {4,3,2,3,2,1,2,1,0}; 
+	   if(theta[9] > 0) {
+	       for (int j = 0; j < 8; j++)
+		   af += theta[j] * cc[j]; 
+	       af /= theta[9]; 
+	       af /= 4; 
+	   }
+	   gdm(af, m1); 
+	   //use SNPs in a bin to re-compute allele frequency. 
+	   //this makes it robust to allele freq. mis-specification. 
+
+	   for (int i = 0; i < 9; i ++)
+	       for (int j = 0; j < 9; j++)
+	       {
+		   sigma[i][j] = 0; 
+		   for (int k = 0; k < 9; k++)
+		       sigma[i][j] += m1[k*9+i] * m1[k*9+j]; 
+		   AtA[i][j] += sigma[i][j] * theta[9]; 
+	       }
+
+	   for (int j = 0; j < 9; j++)
+	       for (int k = 0; k < 9; k++)
+		    AtB[j] += m1[k*9+j] * theta[k]; 
+       }
+
+       if(gdadu.gsl == 1) 
+	   gsl_solve(AtA, AtB, x, np); 
+       else 
+	   nnls(AtA, np, np, AtB, x, &r2, w, zz, index); 
+       double phi=x[0]+ (x[2]+x[4]+x[6])/2+x[7]/4; 
+       {
+	   total_phi += phi * weight; 
+	   total_weight += weight; 
+       }
+   }
+   double phi1 = total_phi / total_weight; 
+
+   if(gdadu.bychr == 2) {
+       for (int i = 0; i < 9; i++)
+	   for (int j = 0; j < 9; j++)
+	       AtA[i][j] = 0; 
+       for (int j = 0; j < 9; j++)
+	   AtB[j] = 0; 
+
+       for (int n = 0; n < nb; n++)
+       {
+	   for (int j = 0; j < 10; j++)
+	   {
+	       theta[j] = 0; 
+	       for (int k = gdadu.ileft[n]; k <= gdadu.iright[n]; k++)
+		   theta[j] += count9_all[k][j]; 
+	   }
+	   double af = 0; 
+	   double cc[9] = {4,3,2,3,2,1,2,1,0}; 
+	   if(theta[9] > 0) {
+	       for (int j = 0; j < 8; j++)
+		   af += theta[j] * cc[j]; 
+	       af /= theta[9]; 
+	       af /= 4; 
+	   }
+	   gdm(af, m1); 
+	   //use SNPs in a bin to re-compute allele frequency. 
+	   //this makes it robust to allele freq. mis-specification. 
+
+	   for (int i = 0; i < 9; i ++)
+	       for (int j = 0; j < 9; j++)
+	       {
+		   sigma[i][j] = 0; 
+		   for (int k = 0; k < 9; k++)
+		       sigma[i][j] += m1[k*9+i] * m1[k*9+j]; 
+		   AtA[i][j] += sigma[i][j] * theta[9]; 
+	       }
+
+	   for (int j = 0; j < 9; j++)
+	       for (int k = 0; k < 9; k++)
+		    AtB[j] += m1[k*9+j] * theta[k]; 
+       }
+
+       if(gdadu.gsl == 1) 
+	   gsl_solve(AtA, AtB, x, np); 
+       else 
+	   nnls(AtA, np, np, AtB, x, &r2, w, zz, index); 
+       double phi2=x[0]+ (x[2]+x[4]+x[6])/2+x[7]/4; 
+       phi1 = phi1 / 2 + phi2 / 2; 
+   }
+
+   gdadu.grm[tiktok] = phi1 * 2.0; 
+   
+   Free2DMatrix(AtA); 
+   delete[] AtB; 
+   delete[] m1; 
+   Free2DMatrix(sigma); 
+   delete[] theta; 
+   Free2DMatrix(count9); 
+   Free2DMatrix(count9_all); 
 }
 
 void jacquard3(void *par) 
@@ -1070,6 +1419,12 @@ void jacquard3(void *par)
 
        if((gi^3) == 0 || (gj^3) == 0) continue;     
        //11 is missing
+       uint16_t tn = gdadu.raf[m]; 
+       if(tn>nb) { 
+	   tn = nb+nb-tn;    //turn af bin into maf bin. 
+	   gi = 2 - gi;      //flip genotypes; 
+	   gj = 2 - gj; 
+       }
        uint8_t cc = ((gi << 2) | gj) - gi; 
        // 00 00    0  -0
        // 00 01    1  -0
@@ -1081,7 +1436,6 @@ void jacquard3(void *par)
        // 10 01    9  -2
        // 10 10    10 -2
 
-       int tn = (int) gdadu.raf[m]; 
        count9[tn][8-cc]++;  
        count9[tn][9]++;  
    }
@@ -1089,7 +1443,7 @@ void jacquard3(void *par)
 //   clock_t clk1 = clock(); 
 //	   build_matrix; 
 
-   for (int n = 1; n < nb; n++)
+   for (int n = 0; n < nb; n++)
    {
        for (int j = 0; j < 10; j++)
        {
@@ -1106,6 +1460,7 @@ void jacquard3(void *par)
 	   af /= 4; 
        }
        gdm(af, m1); 
+
        for (int i = 0; i < 9; i ++)
 	   for (int j = 0; j < np; j++)
 	   {
@@ -1119,20 +1474,22 @@ void jacquard3(void *par)
        for (int j = 0; j < np; j++)
        {
 	   AtA[i][j] = 0; 
-	   for (int n = 1; n < nb; n++) 
+	   for (int n = 0; n < nb; n++) 
 	       for (int k = 0; k < 10; k++)
 	       AtA[i][j] += sigma[n*10+k][i] * sigma[n*10+k][j]; // *wt[i] * wt[j]; 
        }
    for (int j = 0; j < np; j++)
    {
        AtB[j] = 0; 
-       for (int n = 1; n < nb; n++) 
+       for (int n = 0; n < nb; n++) 
 	   for (int k = 0; k < 10; k++)
 	   	AtB[j] += sigma[n*10+k][j] * theta[n*10+k]; 
    }
 
-   if(nnls(AtA, np, np, AtB, x, &r2, w, zz, index) != 0) 
-       cout << "nnls used more than 200 iterations to converge" << endl; 
+   if(gdadu.gsl == 1) 
+       gsl_solve(AtA, AtB, x, np); 
+   else 
+       nnls(AtA, np, np, AtB, x, &r2, w, zz, index); 
    double sumx = 0; 
    for (int i = 0; i < np; i++)
        sumx += x[i]; 
@@ -1222,7 +1579,7 @@ int make_grm(string fn, string pref, int lskip)
        for (int j = 0; j <= i; j++)
        {
 	   char buf[256]; 
-	   sprintf(buf, "%d %d 100000 %7.6f\n", i+1, j+1, vv.at(i*ni+j));  
+	   sprintf(buf, "%d %d 100000 %f\n", i+1, j+1, vv.at(i*ni+j));  
 	   gzprintf(fp1, "%s",  buf); 
        }
    gzclose(fp1); 
@@ -1239,4 +1596,36 @@ int make_grm(string fn, string pref, int lskip)
    fclose(fp2); 
 
    return 0;
+}
+
+
+void gsl_solve(double ** AtA, double * AtB, double * x, int np)
+{
+    gsl_matrix * mU = gsl_matrix_alloc(np, np); 
+    gsl_vector * vB = gsl_vector_alloc(np); 
+    gsl_vector * vx = gsl_vector_alloc(np); 
+
+    gsl_matrix * mV = gsl_matrix_alloc(np, np); 
+    gsl_vector * vS = gsl_vector_alloc(np); 
+    gsl_vector * work = gsl_vector_alloc(np); 
+
+    for (int i = 0; i < np; i++)
+	for (int j = 0; j < np; j++)
+	    gsl_matrix_set(mU, i, j, AtA[i][j]); 
+    for (int i = 0; i < np; i++)
+	    gsl_vector_set(vB, i, AtB[i]); 
+
+    gsl_linalg_SV_decomp(mU, mV, vS, work); 
+    gsl_linalg_SV_solve(mU, mV, vS, vB, vx); 
+
+    for (int i = 0; i < np; i++)
+	x[i] = gsl_vector_get(vx, i); 
+
+    gsl_matrix_free(mU); 
+    gsl_vector_free(vB); 
+    gsl_vector_free(vx); 
+
+    gsl_matrix_free(mV); 
+    gsl_vector_free(vS); 
+    gsl_vector_free(work); 
 }
